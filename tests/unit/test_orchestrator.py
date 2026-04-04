@@ -25,6 +25,7 @@ from agentbench.events.types import (
     STEP_SCORED,
     STREAM_EVAL_RUNS,
     STREAM_EVAL_STEPS,
+    STREAM_SCORES,
     WORKFLOW_COMPLETED,
     WORKFLOW_STEP_DISPATCHED,
 )
@@ -414,7 +415,7 @@ class TestWorkflowCompletion:
         assert len(workflow_completed_calls) == 1
 
         stream, envelope = workflow_completed_calls[0][0]
-        assert stream == STREAM_EVAL_RUNS
+        assert stream == STREAM_SCORES  # Per spec, workflow.completed goes to stream:scores
         assert envelope.payload["run_id"] == sample_run.run_id
         assert envelope.payload["benchmark_id"] == sample_run.benchmark_id
 

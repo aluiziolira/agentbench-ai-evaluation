@@ -161,6 +161,24 @@ class TestRenderPrompt:
         assert sample_case.case_id in result
         assert "{case_id}" not in result
 
+    def test_render_prompt_preserves_json_braces(self, dispatcher, sample_case):
+        """Test that curly braces in JSON examples are preserved."""
+        # Create a step with JSON examples containing curly braces
+        step_with_json = StepDefinition(
+            step_id="test_step",
+            order=0,
+            input='Ticket: {ticket_text}\nExample JSON: {"findings": [{"severity": "high"}]}',
+            timeout_ms=1000,
+            scoring=ScoringConfig(strategy="finding_match"),
+        )
+        result = dispatcher._render_prompt(step_with_json, sample_case)
+        # JSON braces should be preserved
+        assert '{"findings":' in result
+        assert '[{"severity": "high"}]}' in result
+        # Placeholder should be replaced
+        assert "{ticket_text}" not in result
+        assert sample_case.ticket_text in result
+
     def test_render_prompt_preserves_other_text(self, dispatcher, sample_step, sample_case):
         """Test that non-placeholder text is preserved."""
         result = dispatcher._render_prompt(sample_step, sample_case)
@@ -232,6 +250,7 @@ class TestDispatchStep:
         """Test that successful invocation emits agent.response.received."""
         # Mock the adapter
         mock_adapter = MagicMock(spec=AgentAdapter)
+        mock_adapter.agent_id = "gpt-4o-mini"
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
         with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist:
@@ -261,6 +280,7 @@ class TestDispatchStep:
     ):
         """Test that raw I/O is persisted after successful invocation."""
         mock_adapter = MagicMock(spec=AgentAdapter)
+        mock_adapter.agent_id = "gpt-4o-mini"
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
         with patch(
@@ -306,6 +326,7 @@ class TestTimeoutHandling:
         """Test that timeout emits workflow.step.timed_out event."""
         # Create an adapter that never returns (simulates timeout)
         mock_adapter = MagicMock(spec=AgentAdapter)
+        mock_adapter.agent_id = "gpt-4o-mini"
 
         async def slow_invoke(*args, **kwargs):
             await asyncio.sleep(10)  # Sleep longer than timeout
@@ -341,6 +362,7 @@ class TestTimeoutHandling:
     ):
         """Test that no I/O is persisted when timeout occurs."""
         mock_adapter = MagicMock(spec=AgentAdapter)
+        mock_adapter.agent_id = "gpt-4o-mini"
 
         async def slow_invoke(*args, **kwargs):
             await asyncio.sleep(10)
@@ -391,6 +413,7 @@ class TestMainLoop:
 
         # Setup mock adapter
         mock_adapter = MagicMock(spec=AgentAdapter)
+        mock_adapter.agent_id = "gpt-4o-mini"
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
         # Consume should return one event then stop
