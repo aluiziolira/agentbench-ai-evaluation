@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.11-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 # Install UV
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
