@@ -10,10 +10,12 @@ from agentbench.dispatcher.adapters import (
     AnthropicAdapter,
     OpenAIAdapter,
 )
+from agentbench.dispatcher.dispatcher import StepDispatcher
 
 __all__ = [
     "AgentAdapter",
     "OpenAIAdapter",
     "AnthropicAdapter",
     "ADAPTER_REGISTRY",
+    "StepDispatcher",
 ]
