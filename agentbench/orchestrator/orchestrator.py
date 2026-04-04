@@ -35,6 +35,7 @@ from agentbench.events.types import (
     STEP_SCORED,
     STREAM_EVAL_RUNS,
     STREAM_EVAL_STEPS,
+    STREAM_SCORES,
     WORKFLOW_COMPLETED,
     WORKFLOW_STEP_DISPATCHED,
 )
@@ -153,6 +154,9 @@ class Orchestrator:
         await self.mongo_storage.update_run_state(run.run_id, RunState.STEP_IN_PROGRESS, step_index)
 
         # Publish step dispatched event
+        logger.info(
+            f"[ORCHESTRATOR] Publishing WORKFLOW_STEP_DISPATCHED: run_id={run.run_id}, step_id={step.step_id}, step_index={step_index}"
+        )
         await self.event_bus.publish(
             STREAM_EVAL_STEPS,
             EventEnvelope(
@@ -168,7 +172,7 @@ class Orchestrator:
             ),
         )
         logger.info(
-            "Dispatched step %s for run %s",
+            "[ORCHESTRATOR] Successfully dispatched step %s for run %s",
             step.step_id,
             run.run_id,
             extra={
@@ -341,9 +345,9 @@ class Orchestrator:
         # Update MongoDB state
         await self.mongo_storage.update_run_state(run.run_id, RunState.COMPLETED)
 
-        # Publish workflow.completed event
+        # Publish workflow.completed event to stream:scores per spec
         await self.event_bus.publish(
-            STREAM_EVAL_RUNS,
+            STREAM_SCORES,
             EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=WORKFLOW_COMPLETED,
@@ -423,58 +427,112 @@ class Orchestrator:
     async def run(self) -> None:
         """Main loop for the orchestrator.
 
-        Consumes events from stream:eval-runs and processes them according
-        to their type.
+        Consumes events from stream:eval-runs and stream:scores,
+        processing them according to their type.
         """
         self._running = True
         logger.info("Orchestrator started")
 
-        while self._running:
-            try:
-                async for envelope in self.event_bus.consume(
-                    STREAM_EVAL_RUNS,
-                    consumer_group="orchestrator",
-                    consumer_name="orchestrator-1",
-                ):
-                    if not self._running:
-                        break
+        # Start consumers for both streams
+        await asyncio.gather(
+            self._consume_eval_runs(),
+            self._consume_scores(),
+            return_exceptions=True,
+        )
 
-                    try:
-                        if envelope.event_type == EVALUATION_RUN_REQUESTED:
-                            await self._handle_run_requested(envelope)
-                        elif envelope.event_type == STEP_SCORED:
-                            await self._handle_step_scored(envelope)
-                        else:
-                            logger.debug(
-                                "Ignoring event type: %s",
-                                envelope.event_type,
-                                extra={"correlation_id": envelope.correlation_id},
-                            )
-                    except Exception as e:
-                        logger.exception(
-                            "Error processing event %s",
+    async def _consume_eval_runs(self) -> None:
+        """Consume events from stream:eval-runs."""
+        try:
+            async for envelope in self.event_bus.consume(
+                STREAM_EVAL_RUNS,
+                consumer_group="orchestrator",
+                consumer_name="orchestrator-runs",
+            ):
+                if not self._running:
+                    break
+
+                try:
+                    if envelope.event_type == EVALUATION_RUN_REQUESTED:
+                        await self._handle_run_requested(envelope)
+                    else:
+                        logger.debug(
+                            "Ignoring event type on eval-runs: %s",
                             envelope.event_type,
                             extra={"correlation_id": envelope.correlation_id},
                         )
-                        # If it's a run-scoped event, mark the run as failed
-                        if "run_id" in envelope.payload:
-                            await self._fail_run(
-                                envelope.payload["run_id"],
-                                f"Error processing event: {str(e)}",
-                            )
-
-                    # Acknowledge the message
-                    message_id = envelope.__dict__.get("_message_id")
-                    if message_id:
-                        await self.event_bus.ack(
-                            STREAM_EVAL_RUNS,
-                            "orchestrator",
-                            message_id,
+                except Exception as e:
+                    logger.exception(
+                        "Error processing event %s",
+                        envelope.event_type,
+                        extra={"correlation_id": envelope.correlation_id},
+                    )
+                    if "run_id" in envelope.payload:
+                        await self._fail_run(
+                            envelope.payload["run_id"],
+                            f"Error processing event: {str(e)}",
                         )
 
-            except Exception as e:
-                logger.error("Error in orchestrator main loop: %s", e)
-                await asyncio.sleep(1)
+                # Acknowledge the message
+                message_id = envelope.__dict__.get("_message_id")
+                if message_id:
+                    await self.event_bus.ack(
+                        STREAM_EVAL_RUNS,
+                        "orchestrator",
+                        message_id,
+                    )
+
+        except Exception as e:
+            logger.error("Error in eval-runs consumer: %s", e)
+
+    async def _consume_scores(self) -> None:
+        """Consume events from stream:scores."""
+        try:
+            async for envelope in self.event_bus.consume(
+                STREAM_SCORES,
+                consumer_group="orchestrator",
+                consumer_name="orchestrator-scores",
+            ):
+                if not self._running:
+                    break
+
+                try:
+                    if envelope.event_type == STEP_SCORED:
+                        await self._handle_step_scored(envelope)
+                    elif envelope.event_type == WORKFLOW_COMPLETED:
+                        logger.debug(
+                            "Workflow completed event received: %s",
+                            envelope.payload.get("run_id"),
+                            extra={"correlation_id": envelope.correlation_id},
+                        )
+                    else:
+                        logger.debug(
+                            "Ignoring event type on scores: %s",
+                            envelope.event_type,
+                            extra={"correlation_id": envelope.correlation_id},
+                        )
+                except Exception as e:
+                    logger.exception(
+                        "Error processing event %s",
+                        envelope.event_type,
+                        extra={"correlation_id": envelope.correlation_id},
+                    )
+                    if "run_id" in envelope.payload:
+                        await self._fail_run(
+                            envelope.payload["run_id"],
+                            f"Error processing event: {str(e)}",
+                        )
+
+                # Acknowledge the message
+                message_id = envelope.__dict__.get("_message_id")
+                if message_id:
+                    await self.event_bus.ack(
+                        STREAM_SCORES,
+                        "orchestrator",
+                        message_id,
+                    )
+
+        except Exception as e:
+            logger.error("Error in scores consumer: %s", e)
 
     async def stop(self) -> None:
         """Stop the orchestrator."""
