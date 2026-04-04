@@ -1,0 +1,10 @@
+{
+  "case_id": "pr_006_state_consistency_bug",
+  "case_set_id": "pr_review_cases_v1",
+  "difficulty": "hard",
+  "tags": ["caching", "state", "consistency", "bug"],
+  "created_at": "2024-01-20T11:00:00Z",
+      "author": "agentbench-curator",
+  "category": "state_consistency_bug",
+  "description": "Cache invalidation timing issues causing state inconsistency between cache and database"
+}

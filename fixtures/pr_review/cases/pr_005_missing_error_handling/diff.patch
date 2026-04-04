@@ -1,0 +1,10 @@
+From 8c4d7e3a9f2b Mon Sep 17 00:00:00 2001
+From: developer@example.com
+Date: Fri, 19 Jan 2024 10:30:00 -0500
+Subject: [PATCH] Add bulk CSV import service
+
+---
+ app/api/import.py            |  28 +++++++++
+ app/services/import_service.py | 112 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 140 insertions(+)
+

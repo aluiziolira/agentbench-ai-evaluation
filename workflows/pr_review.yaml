@@ -1,0 +1,24 @@
+name: pr_review
+version: "1.0"
+description: PR review evaluation workflow
+
+triggers:
+  - type: manual
+  - type: scheduled
+    cron: "0 0 * * *"
+
+steps:
+  - name: load_case
+    action: load_pr_case
+    
+  - name: run_agent
+    action: execute_agent
+    depends_on: [load_case]
+    
+  - name: evaluate
+    action: grade_output
+    depends_on: [run_agent]
+    
+  - name: store_results
+    action: persist_results
+    depends_on: [evaluate]

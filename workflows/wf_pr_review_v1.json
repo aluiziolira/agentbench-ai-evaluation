@@ -1,0 +1,32 @@
+{
+  "workflow_id": "wf_pr_review_v1",
+  "version": "1.0.0",
+  "status": "published",
+  "description": "PR review workflow for AgentBench - evaluates agent ability to identify material issues in code changes and produce concise review summaries",
+  "steps": [
+    {
+      "step_id": "s1_findings",
+      "order": 0,
+      "input": "You are reviewing a pull request as a senior software engineer.\n\nTicket:\n{ticket_text}\n\nDiff:\n{diff_patch}\n\nIdentify only material issues that could cause bugs, regressions, security problems,\ncontract breaks, data issues, or missing required tests.\n\nReturn JSON only with this schema:\n{\n  \"findings\": [\n    {\n      \"canonical_label\": \"<enum>\",\n      \"severity\": \"high|medium|low\",\n      \"file_path\": \"<repo path>\",\n      \"start_line\": <int>,\n      \"end_line\": <int>,\n      \"title\": \"<short title>\",\n      \"why_it_matters\": \"<one or two sentences>\",\n      \"suggested_test\": \"<short regression test suggestion>\"\n    }\n  ]\n}\n\nRules:\n- Return at most 5 findings.\n- Do not include style nits, naming preferences, or formatting comments.\n- If there are no material issues, return {\"findings\": []}.\n- Use only canonical labels from the allowed taxonomy.",
+      "timeout_ms": 15000,
+      "scoring": {
+        "strategy": "finding_match",
+        "weight": 2.0
+      }
+    },
+    {
+      "step_id": "s2_review_summary",
+      "order": 1,
+      "input": "You are writing the final PR review summary for the following change.\n\nTicket:\n{ticket_text}\n\nDiff:\n{diff_patch}\n\nWrite a concise review summary for the PR author.\n\nRules:\n- 4 to 8 lines total\n- prioritize the most important issue first\n- mention missing tests when they matter\n- no praise, no filler, no restating the entire ticket\n- focus on actionability and risk",
+      "timeout_ms": 15000,
+      "scoring": {
+        "strategy": "llm_judge",
+        "weight": 1.0,
+        "rubric": "Prioritizes the most important issue first; remains grounded in the actual diff and ticket; mentions missing tests when relevant; avoids filler and low-value commentary; is actionable for the PR author"
+      }
+    }
+  ],
+  "scoring_aggregation": "weighted_average",
+  "created_at": "2026-04-04T00:00:00+00:00",
+  "published_at": "2026-04-04T00:00:00+00:00"
+}

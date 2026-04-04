@@ -1,0 +1,37 @@
+{
+  "case_id": "pr_006_state_consistency_bug",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "state_consistency_bug",
+      "severity": "high",
+      "file_path": "app/services/inventory_service.py",
+      "line_span": [65, 85],
+      "must_detect": true,
+      "summary": "Race condition in inventory update: cache is invalidated BEFORE database transaction commits. Concurrent reads between invalidation and commit may cache stale data. Order creation and cache invalidation are not atomic."
+    },
+    {
+      "finding_id": "F2",
+      "canonical_label": "state_consistency_bug",
+      "severity": "high",
+      "file_path": "app/services/inventory_service.py",
+      "line_span": [42, 55],
+      "must_detect": true,
+      "summary": "Cache is set without transaction isolation. If database transaction rolls back after cache write, the cache will contain incorrect (higher) inventory values until TTL expires."
+    },
+    {
+      "finding_id": "F3",
+      "canonical_label": "logging_observability_gap",
+      "severity": "low",
+      "file_path": "app/services/inventory_service.py",
+      "line_span": [1, 100],
+      "must_detect": false,
+      "summary": "No logging of cache hits/misses or inventory discrepancies, making debugging consistency issues difficult."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

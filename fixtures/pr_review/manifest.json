@@ -1,0 +1,54 @@
+{
+  "case_set_id": "pr_review_cases_v1",
+  "version": "1.0.0",
+  "cases": [
+    {
+      "case_id": "pr_001_missing_auth_check",
+      "difficulty": "medium",
+      "enabled": true,
+      "tags": ["auth", "api", "security", "admin"]
+    },
+    {
+      "case_id": "pr_002_missing_test_coverage",
+      "difficulty": "easy",
+      "enabled": true,
+      "tags": ["testing", "coverage", "feature"]
+    },
+    {
+      "case_id": "pr_003_missing_null_guard",
+      "difficulty": "easy",
+      "enabled": true,
+      "tags": ["null-safety", "defensive-programming", "api"]
+    },
+    {
+      "case_id": "pr_004_contract_breaking_change",
+      "difficulty": "hard",
+      "enabled": true,
+      "tags": ["api", "backward-compatibility", "contract"]
+    },
+    {
+      "case_id": "pr_005_missing_error_handling",
+      "difficulty": "medium",
+      "enabled": true,
+      "tags": ["error-handling", "file-io", "robustness"]
+    },
+    {
+      "case_id": "pr_006_state_consistency_bug",
+      "difficulty": "hard",
+      "enabled": true,
+      "tags": ["caching", "state", "consistency", "bug"]
+    },
+    {
+      "case_id": "pr_007_missing_validation",
+      "difficulty": "medium",
+      "enabled": true,
+      "tags": ["validation", "input-sanitization", "security"]
+    },
+    {
+      "case_id": "pr_008_performance_regression",
+      "difficulty": "medium",
+      "enabled": true,
+      "tags": ["performance", "database", "n+1", "optimization"]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+From 4a5e8c2d9b1a Mon Sep 17 00:00:00 2001
+From: developer@example.com
+Date: Mon, 15 Jan 2024 10:30:00 -0500
+Subject: [PATCH] Add batch user export endpoint
+
+---
+ app/api/admin.py       | 45 +++++++++++++++++++++++++++++++++++++++++++
+ app/services/export.py | 32 ++++++++++++++++++++++++++++++++
+ 2 files changed, 77 insertions(+)
+

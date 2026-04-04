@@ -1,0 +1,10 @@
+{
+  "case_id": "pr_007_missing_validation",
+  "case_set_id": "pr_review_cases_v1",
+  "difficulty": "medium",
+  "tags": ["validation", "input-sanitization", "security"],
+  "created_at": "2024-01-21T09:00:00Z",
+  "author": "agentbench-curator",
+  "category": "missing_validation",
+  "description": "Missing input validation on external webhook payload data"
+}
