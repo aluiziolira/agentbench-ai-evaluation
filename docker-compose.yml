@@ -1,16 +1,14 @@
-version: "3.8"
-
 services:
   mongodb:
     image: mongo:7
     container_name: agentbench-mongodb
     restart: unless-stopped
-    ports:
-      - "27017:27017"
+    expose:
+      - "27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
-      MONGO_INITDB_DATABASE: agentbench
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-agentbench}
     volumes:
       - mongodb_data:/data/db
     healthcheck:
@@ -18,13 +16,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - agentbench
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
     container_name: agentbench-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -32,6 +37,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - agentbench
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   agentbench:
     build:
@@ -39,11 +51,13 @@ services:
       dockerfile: Dockerfile
     container_name: agentbench-app
     restart: unless-stopped
+    init: true
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     environment:
-      - MONGODB_URI=mongodb://admin:admin@mongodb:27017/agentbench?authSource=admin
-      - REDIS_URL=redis://redis:6379/0
+      MONGODB_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-changeme}@mongodb:27017/${MONGO_DB:-agentbench}?authSource=admin
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     env_file:
       - .env
     depends_on:
@@ -54,7 +68,26 @@ services:
     volumes:
       - ./data:/app/data
       - ./fixtures:/app/fixtures
+    networks:
+      - agentbench
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 volumes:
   mongodb_data:
   redis_data:
+
+networks:
+  agentbench:
+    driver: bridge
