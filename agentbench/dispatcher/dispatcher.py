@@ -82,11 +82,13 @@ class StepDispatcher:
         Returns:
             Rendered prompt string with placeholders replaced.
         """
-        return step.input.format(
-            ticket_text=case.ticket_text,
-            diff_patch=case.diff_patch,
-            case_id=case.case_id,
-        )
+        # Use safe string replacement instead of format() to avoid
+        # issues with curly braces in JSON examples within the template
+        result = step.input
+        result = result.replace("{ticket_text}", case.ticket_text)
+        result = result.replace("{diff_patch}", case.diff_patch)
+        result = result.replace("{case_id}", case.case_id)
+        return result
 
     async def _persist_raw_io(
         self,
@@ -162,32 +164,69 @@ class StepDispatcher:
         Raises:
             ValueError: If agent_id is unknown (no adapter in registry).
         """
+        logger.info(
+            f"[DISPATCHER] Starting dispatch for run={run.run_id}, step={step.step_id}, agent={run.agent_id}",
+            extra={
+                "correlation_id": run.run_id,
+                "run_id": run.run_id,
+                "step_id": step.step_id,
+                "agent_id": run.agent_id,
+                "case_id": run.case_id,
+            },
+        )
+
         # Load case from fixtures
         # Get fixtures directory from environment or use default
         import os
 
         fixtures_dir = Path(os.environ.get("PR_REVIEW_FIXTURES_DIR", "fixtures/pr_review"))
+        logger.info(f"[DISPATCHER] Loading case from fixtures_dir={fixtures_dir}")
         case = load_case(run.case_id, fixtures_dir)
+        logger.info(
+            f"[DISPATCHER] Loaded case: case_id={case.case_id}, ticket_length={len(case.ticket_text)}, diff_length={len(case.diff_patch)}"
+        )
 
         # Render prompt with case placeholders
         prompt = self._render_prompt(step, case)
+        logger.info(
+            f"[DISPATCHER] Rendered prompt: length={len(prompt)}, first_200_chars={prompt[:200]}"
+        )
 
         # Resolve adapter from registry
+        logger.info(
+            f"[DISPATCHER] Resolving adapter for agent_id={run.agent_id}, registry_keys={list(ADAPTER_REGISTRY.keys())}"
+        )
         adapter = ADAPTER_REGISTRY.get(run.agent_id)
         if adapter is None:
+            logger.error(f"[DISPATCHER] Unknown agent_id: {run.agent_id}")
             raise ValueError(f"Unknown agent_id: {run.agent_id}")
+        logger.info(
+            f"[DISPATCHER] Resolved adapter: {type(adapter).__name__} for agent={adapter.agent_id}"
+        )
 
         # Prepare request
         request = {"prompt": prompt, "agent_id": run.agent_id}
+        logger.info(f"[DISPATCHER] Prepared request with prompt_length={len(request['prompt'])}")
 
         # Invoke with timeout using asyncio.wait_for
         timeout_seconds = step.timeout_ms / 1000.0
         start_time = datetime.now(timezone.utc)
 
+        logger.info(f"[DISPATCHER] Invoking adapter with timeout={timeout_seconds}s")
+
         try:
+            # Create a modified step with the rendered prompt
+            rendered_step = step.model_copy(update={"input": prompt})
+            logger.info(
+                f"[DISPATCHER] Created rendered_step with input_length={len(rendered_step.input)}"
+            )
+
             response, latency_ms = await asyncio.wait_for(
-                adapter.invoke(step, run, []),
+                adapter.invoke(rendered_step, run, []),
                 timeout=timeout_seconds,
+            )
+            logger.info(
+                f"[DISPATCHER] Adapter returned: response_length={len(response)}, latency_ms={latency_ms}"
             )
 
             # Persist raw I/O
@@ -218,7 +257,7 @@ class StepDispatcher:
 
         except asyncio.TimeoutError:
             logger.warning(
-                f"Step {step.step_id} timed out for run {run.run_id}",
+                f"[DISPATCHER] Step {step.step_id} timed out for run {run.run_id} after {timeout_seconds}s",
                 extra={
                     "correlation_id": run.run_id,
                     "run_id": run.run_id,
@@ -285,7 +324,12 @@ class StepDispatcher:
                     )
                     continue
 
+                logger.info(
+                    f"[DISPATCHER] Processing workflow.step.dispatched: run_id={run_id}, step_id={step_id}"
+                )
+
                 # Load run from MongoDB
+                logger.info(f"[DISPATCHER] Loading run from MongoDB: run_id={run_id}")
                 run = await self.mongo_storage.get_run(run_id)
                 if run is None:
                     logger.error(

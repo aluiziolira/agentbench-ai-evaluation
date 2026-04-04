@@ -82,8 +82,17 @@ class AnthropicAdapter:
             TimeoutError: If the request exceeds step.timeout_ms.
             RuntimeError: If the API call fails.
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         # Build messages from conversation history for Anthropic format
         messages = self._build_messages(conversation_history, step.input)
+
+        logger.info(
+            f"[ANTHROPIC] Invoking model={self.model}, agent_id={self.agent_id}, prompt_length={len(step.input)}"
+        )
+        logger.info(f"[ANTHROPIC] Prompt preview: {step.input[:200]}...")
 
         start_time = time.perf_counter()
 
@@ -91,27 +100,34 @@ class AnthropicAdapter:
             # Convert timeout_ms to seconds for asyncio.wait_for
             timeout_seconds = step.timeout_ms / 1000.0
 
+            logger.info(f"[ANTHROPIC] Making API call with timeout={timeout_seconds}s")
             response = await self._invoke_with_timeout(
                 messages=messages,
                 timeout_seconds=timeout_seconds,
             )
 
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.info(f"[ANTHROPIC] API call successful, elapsed_ms={elapsed_ms}")
 
             # Extract response text
             if not response.content:
+                logger.error("[ANTHROPIC] Response contains no content")
                 raise RuntimeError("Anthropic response contains no content")
 
             # Get text from the first content block
             content_block = response.content[0]
             if content_block.type != "text":
+                logger.error(f"[ANTHROPIC] Unexpected content type: {content_block.type}")
                 raise RuntimeError(f"Unexpected content type: {content_block.type}")
 
+            logger.info(f"[ANTHROPIC] Response received: length={len(content_block.text)}")
             return (content_block.text, elapsed_ms)
 
         except TimeoutError:
+            logger.warning("[ANTHROPIC] Request timed out")
             raise
         except Exception as e:
+            logger.error(f"[ANTHROPIC] API error: {e}")
             # Wrap API errors in RuntimeError
             raise RuntimeError(f"Anthropic API error: {e}") from e
 

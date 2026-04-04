@@ -82,9 +82,18 @@ class OpenAIAdapter:
             TimeoutError: If the request exceeds step.timeout_ms.
             RuntimeError: If the API call fails.
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         # Build messages from conversation history + new prompt
         messages: list[dict[str, Any]] = list(conversation_history)
         messages.append({"role": "user", "content": step.input})
+
+        logger.info(
+            f"[OPENAI] Invoking model={self.model}, agent_id={self.agent_id}, prompt_length={len(step.input)}"
+        )
+        logger.info(f"[OPENAI] Prompt preview: {step.input[:200]}...")
 
         start_time = time.perf_counter()
 
@@ -92,26 +101,33 @@ class OpenAIAdapter:
             # Convert timeout_ms to seconds for asyncio.wait_for
             timeout_seconds = step.timeout_ms / 1000.0
 
+            logger.info(f"[OPENAI] Making API call with timeout={timeout_seconds}s")
             response = await self._invoke_with_timeout(
                 messages=messages,
                 timeout_seconds=timeout_seconds,
             )
 
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            logger.info(f"[OPENAI] API call successful, elapsed_ms={elapsed_ms}")
 
             # Extract response text
             if not response.choices:
+                logger.error("[OPENAI] Response contains no choices")
                 raise RuntimeError("OpenAI response contains no choices")
 
             message = response.choices[0].message
             if message.content is None:
+                logger.error("[OPENAI] Response message has no content")
                 raise RuntimeError("OpenAI response message has no content")
 
+            logger.info(f"[OPENAI] Response received: length={len(message.content)}")
             return (message.content, elapsed_ms)
 
         except TimeoutError:
+            logger.warning("[OPENAI] Request timed out")
             raise
         except Exception as e:
+            logger.error(f"[OPENAI] API error: {e}")
             # Wrap API errors in RuntimeError
             raise RuntimeError(f"OpenAI API error: {e}") from e
 
