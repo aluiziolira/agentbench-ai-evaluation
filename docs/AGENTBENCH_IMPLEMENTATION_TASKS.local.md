@@ -57,28 +57,28 @@ Parallelizable groups:
 
 | Task ID | Module | Summary | Depends On | Status |
 |---|---|---|---|---|
-| `CASES-01` | `agentbench/cases/models.py` | Define typed review case models | none | `[ ]` |
-| `CASES-02` | `agentbench/cases/loader.py` | Load manifest and cases from fixtures | `CASES-01` | `[ ]` |
-| `FIXTURES-01` | `fixtures/pr_review/**` | Create seeded manifest and case fixtures | `CASES-01` | `[ ]` |
-| `MODELS-01` | `agentbench/models/*.py` | Refactor run, workflow, results models for case-based benchmarking | `CASES-01` | `[ ]` |
-| `WORKFLOW-01` | `workflows/wf_pr_review_v1.json` | Define the single active workflow | `MODELS-01` | `[ ]` |
-| `EVENTS-01` | `agentbench/events/*.py` | Align event types and payload helpers with case-based runs | `MODELS-01` | `[ ]` |
-| `STORAGE-01` | `agentbench/storage/mongo.py` | Persist workflows, runs, and reports with case-set semantics | `MODELS-01` | `[ ]` |
-| `STORAGE-02` | `agentbench/storage/redis_client.py` | Support run FSM and benchmark tracking keys | `MODELS-01`, `EVENTS-01` | `[ ]` |
-| `SCORING-01` | `agentbench/scoring/strategies/finding_match.py` | Implement deterministic findings scorer | `CASES-01`, `MODELS-01`, `FIXTURES-01` | `[ ]` |
-| `SCORING-02` | `agentbench/scoring/strategies/llm_judge.py` | Implement summary judge scorer | `MODELS-01` | `[ ]` |
-| `SCORING-03` | `agentbench/scoring/engine.py` | Route responses to benchmark scoring strategies | `SCORING-01`, `SCORING-02`, `CASES-02` | `[ ]` |
-| `ADAPTERS-01` | `agentbench/dispatcher/adapters/*.py` | Implement async provider adapters | `MODELS-01` | `[ ]` |
-| `DISPATCH-01` | `agentbench/dispatcher/dispatcher.py` | Render prompts, invoke adapters, and persist raw I/O | `ADAPTERS-01`, `CASES-02`, `WORKFLOW-01` | `[ ]` |
-| `ORCH-01` | `agentbench/orchestrator/orchestrator.py` | Expand benchmarks into case runs and drive step FSM | `WORKFLOW-01`, `STORAGE-01`, `STORAGE-02`, `EVENTS-01` | `[ ]` |
-| `AGG-01` | `agentbench/aggregator/aggregator.py` | Build run and benchmark reports with per-case scoring | `MODELS-01`, `SCORING-03`, `STORAGE-01`, `STORAGE-02` | `[ ]` |
-| `API-01` | `agentbench/api/routers/*.py` | Expose benchmark run and report endpoints | `ORCH-01`, `AGG-01` | `[ ]` |
-| `CLI-01` | `cli/main.py` | Expose run, report, seed, rescore, and list-cases commands | `ORCH-01`, `AGG-01`, `CASES-02` | `[ ]` |
-| `MAIN-01` | `agentbench/main.py` | Wire all long-running services together | `EVENTS-01`, `DISPATCH-01`, `SCORING-03`, `ORCH-01`, `AGG-01` | `[ ]` |
-| `TEST-UNIT-01` | `tests/unit/test_case_loader.py` | Cover fixture and loader behavior | `CASES-02`, `FIXTURES-01` | `[ ]` |
-| `TEST-UNIT-02` | `tests/unit/test_finding_match.py` | Cover deterministic scoring behavior | `SCORING-01`, `FIXTURES-01` | `[ ]` |
-| `TEST-UNIT-03` | `tests/unit/test_adapters.py`, `tests/unit/test_llm_judge.py` | Cover adapters and summary judge | `ADAPTERS-01`, `SCORING-02` | `[ ]` |
-| `TEST-INT-01` | `tests/integration/test_pipeline.py` | Cover end-to-end benchmark pipeline | `MAIN-01`, `API-01`, `CLI-01` | `[ ]` |
+| `CASES-01` | `agentbench/cases/models.py` | Define typed review case models | none | `[x]` |
+| `CASES-02` | `agentbench/cases/loader.py` | Load manifest and cases from fixtures | `CASES-01` | `[x]` |
+| `FIXTURES-01` | `fixtures/pr_review/**` | Create seeded manifest and case fixtures | `CASES-01` | `[x]` |
+| `MODELS-01` | `agentbench/models/*.py` | Refactor run, workflow, results models for case-based benchmarking | `CASES-01` | `[x]` |
+| `WORKFLOW-01` | `workflows/wf_pr_review_v1.json` | Define the single active workflow | `MODELS-01` | `[x]` |
+| `EVENTS-01` | `agentbench/events/*.py` | Align event types and payload helpers with case-based runs | `MODELS-01` | `[x]` |
+| `STORAGE-01` | `agentbench/storage/mongo.py` | Persist workflows, runs, and reports with case-set semantics | `MODELS-01` | `[x]` |
+| `STORAGE-02` | `agentbench/storage/redis_client.py` | Support run FSM and benchmark tracking keys | `MODELS-01`, `EVENTS-01` | `[x]` |
+| `SCORING-01` | `agentbench/scoring/strategies/finding_match.py` | Implement deterministic findings scorer | `CASES-01`, `MODELS-01`, `FIXTURES-01` | `[x]` |
+| `SCORING-02` | `agentbench/scoring/strategies/llm_judge.py` | Implement summary judge scorer | `MODELS-01` | `[x]` |
+| `SCORING-03` | `agentbench/scoring/engine.py` | Route responses to benchmark scoring strategies | `SCORING-01`, `SCORING-02`, `CASES-02` | `[x]` |
+| `ADAPTERS-01` | `agentbench/dispatcher/adapters/*.py` | Implement async provider adapters | `MODELS-01` | `[x]` |
+| `DISPATCH-01` | `agentbench/dispatcher/dispatcher.py` | Render prompts, invoke adapters, and persist raw I/O | `ADAPTERS-01`, `CASES-02`, `WORKFLOW-01` | `[x]` |
+| `ORCH-01` | `agentbench/orchestrator/orchestrator.py` | Expand benchmarks into case runs and drive step FSM | `WORKFLOW-01`, `STORAGE-01`, `STORAGE-02`, `EVENTS-01` | `[x]` |
+| `AGG-01` | `agentbench/aggregator/aggregator.py` | Build run and benchmark reports with per-case scoring | `MODELS-01`, `SCORING-03`, `STORAGE-01`, `STORAGE-02` | `[x]` |
+| `API-01` | `agentbench/api/routers/*.py` | Expose benchmark run and report endpoints | `ORCH-01`, `AGG-01` | `[x]` |
+| `CLI-01` | `cli/main.py` | Expose run, report, seed, rescore, and list-cases commands | `ORCH-01`, `AGG-01`, `CASES-02` | `[x]` |
+| `MAIN-01` | `agentbench/main.py` | Wire all long-running services together | `EVENTS-01`, `DISPATCH-01`, `SCORING-03`, `ORCH-01`, `AGG-01` | `[x]` |
+| `TEST-UNIT-01` | `tests/unit/test_case_loader.py` | Cover fixture and loader behavior | `CASES-02`, `FIXTURES-01` | `[x]` |
+| `TEST-UNIT-02` | `tests/unit/test_finding_match.py` | Cover deterministic scoring behavior | `SCORING-01`, `FIXTURES-01` | `[x]` |
+| `TEST-UNIT-03` | `tests/unit/test_adapters.py`, `tests/unit/test_llm_judge.py` | Cover adapters and summary judge | `ADAPTERS-01`, `SCORING-02` | `[x]` |
+| `TEST-INT-01` | `tests/integration/test_pipeline.py` | Cover end-to-end benchmark pipeline | `MAIN-01`, `API-01`, `CLI-01` | `[~]` |
 | `README-01` | `README.md` | Document architecture, benchmark, and demo assets | `TEST-INT-01` | `[ ]` |
 
 ---
@@ -574,3 +574,61 @@ Before marking a task complete, verify:
 - any new follow-up dependency was added to this board if necessary
 
 This document should remain the implementation coordination layer until the project reaches the SDD definition of done.
+
+---
+
+## 5. Current Progress Summary
+
+**Last Updated:** 2025-04-04
+
+### Overall Completion: ~85%
+
+| Category | Status |
+|----------|--------|
+| Core Models & Data Layer | ✅ 100% Complete |
+| Services (Orchestrator, Dispatcher, Scoring, Aggregator) | ✅ 100% Complete |
+| API & CLI | ✅ 100% Complete |
+| Unit Tests | ✅ 329 tests passing |
+| Integration Tests | ⚠️ Code complete, E2E validation pending |
+| Documentation (README) | ❌ Placeholder only |
+
+### Completed Tasks (21/23)
+- ✅ CASES-01 through CASES-02
+- ✅ FIXTURES-01
+- ✅ MODELS-01
+- ✅ WORKFLOW-01
+- ✅ EVENTS-01
+- ✅ STORAGE-01 through STORAGE-02
+- ✅ SCORING-01 through SCORING-03
+- ✅ ADAPTERS-01
+- ✅ DISPATCH-01
+- ✅ ORCH-01
+- ✅ AGG-01
+- ✅ API-01
+- ✅ CLI-01
+- ✅ MAIN-01
+- ✅ TEST-UNIT-01 through TEST-UNIT-03
+
+### In Progress (1/23)
+- ⚠️ **TEST-INT-01** - Integration test structure complete, full E2E execution with real API keys pending validation
+
+### Pending (1/23)
+- ❌ **README-01** - Documentation incomplete (placeholder only)
+
+### Critical Fixes Applied
+1. ✅ Event Bus - Removed `@asynccontextmanager` for proper async iteration
+2. ✅ Redis Import - Added explicit module-level import for exception handling
+3. ✅ Fixtures Path - Changed to use `PR_REVIEW_FIXTURES_DIR` environment variable
+4. ✅ API Environment - Added env var support for MongoDB/Redis auth
+
+### Remaining Work
+1. **E2E Validation** (Priority: HIGH)
+   - Execute full benchmark with valid API keys
+   - Verify raw I/O files are written
+   - Verify benchmark report is generated
+   
+2. **Raw I/O Fixtures** (Priority: HIGH)
+   - Commit output from one complete benchmark run
+   
+3. **README Completion** (Priority: MEDIUM)
+   - Add all Section 20 requirements from SDD
