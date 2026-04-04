@@ -249,8 +249,10 @@ class ScoringEngine:
             return None
 
         # Load case from fixtures
-        # Note: case_set_id maps to fixtures directory name
-        fixtures_dir = Path(run.case_set_id)
+        # Get fixtures directory from environment or use default
+        import os
+
+        fixtures_dir = Path(os.environ.get("PR_REVIEW_FIXTURES_DIR", "fixtures/pr_review"))
         try:
             case = load_case(run.case_id, fixtures_dir)
         except (FileNotFoundError, ValueError) as e:
@@ -401,7 +403,9 @@ class ScoringEngine:
             FileNotFoundError: If the case cannot be loaded.
         """
         # Load case from fixtures
-        fixtures_dir = Path(run.case_set_id)
+        import os
+
+        fixtures_dir = Path(os.environ.get("PR_REVIEW_FIXTURES_DIR", "fixtures/pr_review"))
         case = load_case(run.case_id, fixtures_dir)
 
         return await self._score_step(
