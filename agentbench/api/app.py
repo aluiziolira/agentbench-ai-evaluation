@@ -1,5 +1,6 @@
 """FastAPI application for AgentBench API."""
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,13 +14,15 @@ from agentbench.storage.redis_client import RedisStorage
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Initialize storage
-    app.state.mongo = MongoStorage("mongodb://localhost:27017", "agentbench")
+    # Initialize storage with environment variables
+    mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+    app.state.mongo = MongoStorage(mongo_uri, "agentbench")
     await app.state.mongo.setup_indexes()
 
-    app.state.redis = RedisStorage(redis_url="redis://localhost:6379")
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    app.state.redis = RedisStorage(redis_url=redis_url)
 
-    app.state.event_bus = EventBus(redis=app.state.redis._client)
+    app.state.event_bus = EventBus(redis_client=await app.state.redis._get_client())
 
     yield
 
