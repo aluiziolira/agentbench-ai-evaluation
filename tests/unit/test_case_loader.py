@@ -156,8 +156,8 @@ class TestListEnabledCases:
             case_set_id="pr_review_cases_v1",
             version="1.0.0",
             cases=[
-                CaseManifestEntry(case_id="pr_001", difficulty="easy", enabled=True),
-                CaseManifestEntry(case_id="pr_002", difficulty="medium", enabled=False),
+                CaseManifestEntry(case_id="pr_001", difficulty="easy", enabled=True, tags=["auth"]),
+                CaseManifestEntry(case_id="pr_002", difficulty="medium", enabled=False, tags=[]),
             ],
         )
 
@@ -172,7 +172,7 @@ class TestListEnabledCases:
             case_set_id="pr_review_cases_v1",
             version="1.0.0",
             cases=[
-                CaseManifestEntry(case_id="pr_001", difficulty="easy", enabled=True),
+                CaseManifestEntry(case_id="pr_001", difficulty="easy", enabled=True, tags=[]),
             ],
         )
 
@@ -186,8 +186,8 @@ class TestListEnabledCases:
             case_set_id="pr_review_cases_v1",
             version="1.0.0",
             cases=[
-                CaseManifestEntry(case_id="pr_001", difficulty="easy", enabled=False),
-                CaseManifestEntry(case_id="pr_002", difficulty="medium", enabled=False),
+                CaseManifestEntry(case_id="pr_001", difficulty="easy", enabled=False, tags=[]),
+                CaseManifestEntry(case_id="pr_002", difficulty="medium", enabled=False, tags=[]),
             ],
         )
 
@@ -693,4 +693,51 @@ class TestLoaderIntegration:
             (case_dir / "ticket.md").write_text(f"# {case_id}\n\nDescription here.")
 
             # diff.patch
-            (case_dir / "diff.patch").write_text("
+            (case_dir / "diff.patch").write_text("diff content here")
+
+            # ground_truth.json
+            ground_truth = {
+                "expected_findings": [
+                    {
+                        "finding_id": "F1",
+                        "canonical_label": "missing_permission_check",
+                        "severity": "high",
+                        "file_path": "app/api/admin.py",
+                        "line_span": [42, 57],
+                        "must_detect": True,
+                        "summary": "Missing auth check",
+                    }
+                ],
+                "disallowed_findings": [],
+            }
+            (case_dir / "ground_truth.json").write_text(json.dumps(ground_truth))
+
+            # metadata.json
+            metadata = {
+                "case_set_id": "pr_review_cases_v1",
+                "difficulty": "medium",
+                "tags": ["auth", "api"],
+            }
+            (case_dir / "metadata.json").write_text(json.dumps(metadata))
+
+        # Load the full case set
+        manifest = load_manifest(fixtures_dir / "manifest.json")
+        enabled_cases = list_enabled_cases(manifest)
+
+        assert len(enabled_cases) == 2
+
+        # Load each case individually
+        for case_def in enabled_cases:
+            case = load_case(case_def.case_id, fixtures_dir)
+            assert isinstance(case, ReviewCaseDefinition)
+            assert case.case_id == case_def.case_id
+            assert case.case_set_id == "pr_review_cases_v1"
+
+        # Load full case set via convenience function
+        cases = load_case_set("pr_review_cases_v1", fixtures_dir)
+
+        assert len(cases) == 2
+        assert {c.case_id for c in cases} == {
+            "pr_001_missing_auth_check",
+            "pr_002_api_contract_break",
+        }
