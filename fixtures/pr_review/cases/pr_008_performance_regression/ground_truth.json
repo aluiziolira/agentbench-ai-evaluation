@@ -1,0 +1,37 @@
+{
+  "case_id": "pr_008_performance_regression",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "performance_regression",
+      "severity": "high",
+      "file_path": "app/services/recommendation_service.py",
+      "line_span": [28, 48],
+      "must_detect": true,
+      "summary": "N+1 query problem: get_related_products iterates over order items and queries database for each category separately. For an order with 10 items, this makes 10+ separate database queries instead of a single efficient query."
+    },
+    {
+      "finding_id": "F2",
+      "canonical_label": "performance_regression",
+      "severity": "high",
+      "file_path": "app/services/recommendation_service.py",
+      "line_span": [65, 75],
+      "must_detect": true,
+      "summary": "In-memory filtering of bestsellers loads ALL products from database then filters in Python. For large catalogs, this loads thousands of rows unnecessarily instead of using database-level filtering."
+    },
+    {
+      "finding_id": "F3",
+      "canonical_label": "missing_error_handling",
+      "severity": "medium",
+      "file_path": "app/services/recommendation_service.py",
+      "line_span": [35, 42],
+      "must_detect": false,
+      "summary": "No timeout or fallback if recommendation service is slow, could block order confirmation response."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

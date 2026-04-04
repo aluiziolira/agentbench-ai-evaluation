@@ -1,0 +1,10 @@
+{
+  "case_id": "pr_001_missing_auth_check",
+  "case_set_id": "pr_review_cases_v1",
+  "difficulty": "medium",
+  "tags": ["auth", "api", "security", "admin"],
+  "created_at": "2024-01-15T10:00:00Z",
+  "author": "agentbench-curator",
+  "category": "missing_permission_check",
+  "description": "API endpoint missing permission check - any authenticated user can export sensitive user data"
+}

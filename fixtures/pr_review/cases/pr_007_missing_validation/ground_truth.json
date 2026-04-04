@@ -1,0 +1,37 @@
+{
+  "case_id": "pr_007_missing_validation",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "missing_validation",
+      "severity": "high",
+      "file_path": "app/api/webhooks.py",
+      "line_span": [42, 55],
+      "must_detect": true,
+      "summary": "Webhook payload is not validated before processing. Missing validation for required fields (event_type, order_id, amount). Malformed payloads cause unhandled exceptions."
+    },
+    {
+      "finding_id": "F2",
+      "canonical_label": "missing_validation",
+      "severity": "high",
+      "file_path": "app/api/webhooks.py",
+      "line_span": [58, 72],
+      "must_detect": true,
+      "summary": "Amount field from external source is used without type validation or bounds checking. Could lead to type errors or business logic issues with negative/zero amounts."
+    },
+    {
+      "finding_id": "F3",
+      "canonical_label": "missing_error_handling",
+      "severity": "medium",
+      "file_path": "app/api/webhooks.py",
+      "line_span": [85, 95],
+      "must_detect": false,
+      "summary": "Signature verification failure returns generic 500 error instead of proper 401/403. Error message leaks implementation details."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

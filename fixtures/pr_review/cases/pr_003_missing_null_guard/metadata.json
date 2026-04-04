@@ -1,0 +1,10 @@
+{
+  "case_id": "pr_003_missing_null_guard",
+  "case_set_id": "pr_review_cases_v1",
+  "difficulty": "easy",
+  "tags": ["null-safety", "defensive-programming", "api"],
+  "created_at": "2024-01-17T11:00:00Z",
+  "author": "agentbench-curator",
+  "category": "missing_null_guard",
+  "description": "Missing null/None checks before calling methods on potentially null objects"
+}

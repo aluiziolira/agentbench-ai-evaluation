@@ -1,0 +1,290 @@
+"""LLM-based judge scoring strategy for AgentBench.
+
+This module implements the LLMJudgeStrategy that uses an LLM (claude-haiku-4-5)
+to evaluate the quality of PR review summaries against a rubric with five dimensions.
+"""
+
+import json
+import logging
+import re
+from typing import Any
+
+from agentbench.cases.models import ReviewCaseDefinition
+from agentbench.models.results import StepScore
+from agentbench.models.workflow import StepDefinition
+
+logger = logging.getLogger(__name__)
+
+# Default judge model as per spec Section 12.2
+DEFAULT_JUDGE_MODEL = "claude-haiku-4-5-20251001"
+
+# Judge prompt template with rubric dimensions from spec Section 12.2
+JUDGE_PROMPT_TEMPLATE = """You are evaluating a PR review summary. Rate it on these dimensions (0.0-1.0 each):
+1. Prioritizes most important issue first
+2. Grounded in actual diff and ticket
+3. Mentions missing tests when relevant
+4. Avoids filler and low-value commentary
+5. Actionable for PR author
+
+Review Summary to evaluate:
+{summary_text}
+
+Ticket:
+{ticket_text}
+
+Diff:
+{diff_patch}
+
+Return JSON:
+{{
+  "score": <float 0.0-1.0>,
+  "reasoning": "<explanation>"
+}}"""
+
+
+class LLMJudgeStrategy:
+    """LLM-based judge strategy for scoring review summaries.
+
+    This strategy uses an LLM to evaluate the quality of a review summary
+    against a five-dimension rubric. The judge returns a score between
+    0.0 and 1.0 with explanatory reasoning.
+
+    Attributes:
+        strategy_id: Unique identifier for this scoring strategy ("llm_judge").
+        anthropic_client: Optional pre-configured Anthropic client for testing.
+        judge_model: Model identifier to use for judging.
+
+    Example:
+        >>> strategy = LLMJudgeStrategy()
+        >>> score = strategy.score(step, response_text, run_id, latency_ms, case)
+    """
+
+    strategy_id: str = "llm_judge"
+
+    def __init__(self, anthropic_client: Any | None = None) -> None:
+        """Initialize the LLM judge strategy.
+
+        Args:
+            anthropic_client: Optional pre-configured Anthropic client.
+                If not provided, a new client will be created using default
+                environment configuration (ANTHROPIC_API_KEY).
+        """
+        self._client = anthropic_client
+        self._judge_model = DEFAULT_JUDGE_MODEL
+
+    def _get_client(self) -> Any:
+        """Get or create the Anthropic client.
+
+        Returns:
+            Configured Anthropic AsyncAnthropic client.
+
+        Raises:
+            ImportError: If anthropic package is not installed.
+        """
+        if self._client is not None:
+            return self._client
+
+        try:
+            import anthropic
+
+            self._client = anthropic.AsyncAnthropic()
+            return self._client
+        except ImportError as e:
+            raise ImportError(
+                "anthropic package is required for LLMJudgeStrategy. "
+                "Install with: pip install anthropic"
+            ) from e
+
+    def _build_judge_prompt(
+        self,
+        summary_text: str,
+        case: ReviewCaseDefinition,
+    ) -> str:
+        """Build the judge prompt with rubric and case data.
+
+        Args:
+            summary_text: The review summary text to evaluate.
+            case: The review case containing ticket and diff.
+
+        Returns:
+            Formatted judge prompt string.
+        """
+        return JUDGE_PROMPT_TEMPLATE.format(
+            summary_text=summary_text,
+            ticket_text=case.ticket_text,
+            diff_patch=case.diff_patch,
+        )
+
+    def _parse_judge_response(self, response_text: str) -> tuple[float, str]:
+        """Parse the judge response to extract score and reasoning.
+
+        Attempts to extract a JSON object with 'score' and 'reasoning' fields.
+        Falls back to pattern matching if JSON parsing fails.
+
+        Args:
+            response_text: Raw text response from the judge LLM.
+
+        Returns:
+            Tuple of (score: float, reasoning: str).
+
+        Raises:
+            ValueError: If response cannot be parsed for a valid score.
+        """
+        # Try to extract JSON from the response
+        # Look for JSON block in markdown code blocks or raw JSON
+        json_patterns = [
+            r"```json\s*(\{.*?\})\s*```",  # Markdown JSON block
+            r"```\s*(\{.*?\})\s*```",  # Generic code block with JSON
+            r'(\{\s*"score".*?\})',  # Raw JSON object with score field
+        ]
+
+        json_str = None
+        for pattern in json_patterns:
+            match = re.search(pattern, response_text, re.DOTALL)
+            if match:
+                json_str = match.group(1)
+                break
+
+        # If no JSON block found, try the whole response
+        if json_str is None:
+            json_str = response_text.strip()
+
+        # Try to parse JSON
+        try:
+            data = json.loads(json_str)
+            if "score" in data:
+                score = float(data["score"])
+                reasoning = data.get("reasoning", "No reasoning provided")
+                # Handle scores that might be 0-100 instead of 0.0-1.0
+                # Only normalize if score is clearly in 0-100 range (> 10)
+                if score > 10.0 and score <= 100.0:
+                    score = score / 100.0
+                # Clamp score to valid range
+                score = max(0.0, min(1.0, score))
+                return score, reasoning
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass
+
+        # Fallback: Try to extract just a numeric score (0.0-1.0)
+        score_pattern = r"(?:score|rating)[\s:=]+(\d+\.?\d*)"
+        match = re.search(score_pattern, response_text, re.IGNORECASE)
+        if match:
+            try:
+                score = float(match.group(1))
+                # Handle scores that might be 0-100 instead of 0.0-1.0
+                if score > 1.0 and score <= 100.0:
+                    score = score / 100.0
+                score = max(0.0, min(1.0, score))
+                return score, "Score extracted via pattern matching"
+            except ValueError:
+                pass
+
+        raise ValueError(f"Could not parse valid score from judge response: {response_text[:200]}")
+
+    async def _invoke_judge(self, prompt: str) -> str:
+        """Invoke the judge LLM with the given prompt.
+
+        Args:
+            prompt: The formatted judge prompt.
+
+        Returns:
+            Raw text response from the judge LLM.
+        """
+        client = self._get_client()
+
+        response = await client.messages.create(
+            model=self._judge_model,
+            max_tokens=1024,
+            temperature=0,  # Deterministic for consistent judging
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+        )
+
+        # Extract text content from response
+        content = response.content
+        if isinstance(content, list) and len(content) > 0:
+            return str(content[0].text)
+        return str(content)
+
+    def score(
+        self,
+        step: StepDefinition,
+        response_text: str,
+        run_id: str,
+        latency_ms: int,
+        case: ReviewCaseDefinition,
+    ) -> StepScore:
+        """Score a review summary using the LLM judge.
+
+        Args:
+            step: The workflow step definition containing scoring configuration.
+            response_text: The raw text response from the agent (review summary).
+            run_id: Unique identifier for this evaluation run.
+            latency_ms: Execution latency in milliseconds.
+            case: The review case definition with ticket and diff data.
+
+        Returns:
+            StepScore containing the computed score and metadata.
+
+        Note:
+            If the judge response cannot be parsed, returns a neutral score
+            of 0.5 with an explanation in the details.
+        """
+        import asyncio
+
+        # Build the judge prompt
+        judge_prompt = self._build_judge_prompt(response_text, case)
+
+        # Invoke the judge (sync wrapper for async call)
+        try:
+            loop = asyncio.get_event_loop()
+            judge_response = loop.run_until_complete(self._invoke_judge(judge_prompt))
+        except RuntimeError:
+            # No event loop running, create a new one
+            judge_response = asyncio.run(self._invoke_judge(judge_prompt))
+
+        # Parse the judge response
+        try:
+            score, reasoning = self._parse_judge_response(judge_response)
+            parse_failed = False
+        except ValueError as e:
+            # Parse failure: return neutral score with explanation
+            logger.warning(
+                "LLM judge parse failure for run_id=%s, case_id=%s: %s",
+                run_id,
+                case.case_id,
+                str(e),
+            )
+            score = 0.5
+            reasoning = f"Parse failure fallback: {str(e)}"
+            parse_failed = True
+
+        # Calculate weighted score
+        weight = step.scoring.weight if step.scoring else 1.0
+        weighted_score = score * weight
+
+        # Determine pass/fail (threshold at 0.5)
+        passed = score >= 0.5
+
+        return StepScore(
+            run_id=run_id,
+            case_id=case.case_id,
+            step_id=step.step_id,
+            strategy=self.strategy_id,
+            raw_score=score,
+            weighted_score=weighted_score,
+            latency_ms=latency_ms,
+            passed=passed,
+            details={
+                "reasoning": reasoning,
+                "judge_model": self._judge_model,
+                "judge_prompt": judge_prompt,
+                "judge_response": judge_response,
+                "parse_failed": parse_failed,
+                "weight_applied": weight,
+            },
+        )

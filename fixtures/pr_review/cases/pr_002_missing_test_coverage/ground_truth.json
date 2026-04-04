@@ -1,0 +1,19 @@
+{
+  "case_id": "pr_002_missing_test_coverage",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "missing_test_coverage",
+      "severity": "high",
+      "file_path": "tests/services/test_discount.py",
+      "line_span": [1, 1],
+      "must_detect": true,
+      "summary": "The DiscountCalculator implementation has no corresponding test file. Complex business logic for discounts requires comprehensive unit tests to prevent regressions."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "case_id": "pr_004_contract_breaking_change",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "contract_breaking_change",
+      "severity": "high",
+      "file_path": "app/api/orders.py",
+      "line_span": [45, 68],
+      "must_detect": true,
+      "summary": "The API response format was changed from nested 'data' object to flat structure with 'results' array. This breaks existing clients expecting the old format with items under response['data']['orders']."
+    },
+    {
+      "finding_id": "F2",
+      "canonical_label": "contract_breaking_change",
+      "severity": "high",
+      "file_path": "app/api/orders.py",
+      "line_span": [92, 108],
+      "must_detect": true,
+      "summary": "The single order endpoint changed 'order_id' field to 'id' and removed the 'order' wrapper object. Existing integrations using response['order']['order_id'] will break."
+    },
+    {
+      "finding_id": "F3",
+      "canonical_label": "missing_test_coverage",
+      "severity": "medium",
+      "file_path": "tests/test_orders.py",
+      "line_span": [1, 1],
+      "must_detect": false,
+      "summary": "No tests verify backward compatibility or document the breaking change for API consumers."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "case_id": "pr_001_missing_auth_check",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "missing_permission_check",
+      "severity": "high",
+      "file_path": "app/api/admin.py",
+      "line_span": [42, 57],
+      "must_detect": true,
+      "summary": "The /api/v1/admin/users/export endpoint does not enforce admin permission check. Any authenticated user can access this endpoint and export user data."
+    },
+    {
+      "finding_id": "F2",
+      "canonical_label": "missing_test_coverage",
+      "severity": "medium",
+      "file_path": "tests/test_admin.py",
+      "line_span": [1, 1],
+      "must_detect": false,
+      "summary": "No test cases verify that non-admin users are blocked from accessing the export endpoint."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

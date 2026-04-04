@@ -1,0 +1,37 @@
+{
+  "case_id": "pr_005_missing_error_handling",
+  "expected_findings": [
+    {
+      "finding_id": "F1",
+      "canonical_label": "missing_error_handling",
+      "severity": "high",
+      "file_path": "app/services/import_service.py",
+      "line_span": [35, 50],
+      "must_detect": true,
+      "summary": "The CSV file is opened and read without any try/catch block for FileNotFoundError, PermissionError, or UnicodeDecodeError. An invalid file path or encoding will crash the entire import process."
+    },
+    {
+      "finding_id": "F2",
+      "canonical_label": "missing_error_handling",
+      "severity": "high",
+      "file_path": "app/services/import_service.py",
+      "line_span": [52, 65],
+      "must_detect": true,
+      "summary": "Database insertions in process_records lack error handling. A single bad record will fail the entire transaction without rollback or partial commit strategy."
+    },
+    {
+      "finding_id": "F3",
+      "canonical_label": "logging_observability_gap",
+      "severity": "medium",
+      "file_path": "app/services/import_service.py",
+      "line_span": [1, 100],
+      "must_detect": false,
+      "summary": "No logging or observability hooks for tracking import progress, failures, or performance metrics."
+    }
+  ],
+  "disallowed_findings": [
+    {
+      "canonical_label": "style_only_nit"
+    }
+  ]
+}

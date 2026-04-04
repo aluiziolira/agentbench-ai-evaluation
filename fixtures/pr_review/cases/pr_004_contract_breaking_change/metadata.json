@@ -1,0 +1,10 @@
+{
+  "case_id": "pr_004_contract_breaking_change",
+  "case_set_id": "pr_review_cases_v1",
+  "difficulty": "hard",
+  "tags": ["api", "backward-compatibility", "contract"],
+  "created_at": "2024-01-18T14:00:00Z",
+  "author": "agentbench-curator",
+  "category": "contract_breaking_change",
+  "description": "API response format changed in a backward-incompatible way, breaking existing client integrations"
+}

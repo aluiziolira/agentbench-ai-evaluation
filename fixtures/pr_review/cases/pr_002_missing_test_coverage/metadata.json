@@ -1,0 +1,10 @@
+{
+  "case_id": "pr_002_missing_test_coverage",
+  "case_set_id": "pr_review_cases_v1",
+  "difficulty": "easy",
+  "tags": ["testing", "coverage", "feature"],
+  "created_at": "2024-01-16T09:00:00Z",
+  "author": "agentbench-curator",
+  "category": "missing_test_coverage",
+  "description": "New feature implementation with no regression tests"
+}
