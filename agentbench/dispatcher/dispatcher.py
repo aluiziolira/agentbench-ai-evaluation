@@ -163,7 +163,8 @@ class StepDispatcher:
             ValueError: If agent_id is unknown (no adapter in registry).
         """
         # Load case from fixtures
-        fixtures_dir = Path(run.case_set_id)
+        # Map case_set_id to fixtures directory
+        fixtures_dir = self.raw_io_dir.parent / "fixtures" / "pr_review"
         case = load_case(run.case_id, fixtures_dir)
 
         # Render prompt with case placeholders
