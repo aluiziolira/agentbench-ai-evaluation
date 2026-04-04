@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import sys
+import traceback
 from pathlib import Path
 
 import structlog
@@ -24,7 +25,15 @@ from agentbench.storage.redis_client import RedisStorage
 # Load environment variables
 load_dotenv()
 
-# Configure logging
+# Configure standard library logging first (before structlog)
+# This ensures logs from third-party libraries are visible
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    level=logging.INFO,
+    stream=sys.stdout,
+)
+
+# Configure structlog
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
@@ -34,7 +43,10 @@ structlog.configure(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
-        structlog.processors.JSONRenderer(),
+        # Use console renderer for development visibility
+        structlog.dev.ConsoleRenderer(colors=True)
+        if sys.stdout.isatty()
+        else structlog.processors.JSONRenderer(),
     ],
     context_class=dict,
     logger_factory=structlog.stdlib.LoggerFactory(),
@@ -63,6 +75,27 @@ class AgentBenchRuntime:
         """Handle shutdown signals."""
         logger.info(f"Received signal {sig.name}, shutting down...")
         self._shutdown_event.set()
+
+    def _setup_signal_handlers(self) -> None:
+        """Set up signal handlers for graceful shutdown.
+
+        This must be called before starting services to ensure signals
+        are caught during initialization.
+        """
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            # Use a regular function that sets the event directly
+            # instead of creating an async task
+            def handle_signal(s: signal.Signals = sig) -> None:
+                # Schedule the async handler in the event loop
+                asyncio.create_task(self._signal_handler(s))
+
+            try:
+                loop.add_signal_handler(sig, handle_signal)
+                logger.debug(f"Registered signal handler for {sig.name}")
+            except ValueError as e:
+                # Can happen on Windows or if signal handlers already set
+                logger.warning(f"Could not set signal handler for {sig.name}: {e}")
 
     async def initialize(self) -> None:
         """Initialize all services."""
@@ -157,28 +190,59 @@ class AgentBenchRuntime:
 
     async def run(self) -> None:
         """Main runtime loop."""
-        await self.initialize()
-        await self.start()
+        # Set up signal handlers FIRST, before any initialization
+        self._setup_signal_handlers()
 
-        # Set up signal handlers
-        loop = asyncio.get_event_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(self._signal_handler(s)))
+        try:
+            await self.initialize()
+            await self.start()
+        except Exception as e:
+            logger.exception("Failed to initialize or start services")
+            # Ensure logs are flushed before exit
+            logging.shutdown()
+            raise
 
         logger.info("AgentBench runtime running. Press Ctrl+C to stop.")
 
-        # Wait for shutdown signal
-        await self._shutdown_event.wait()
-
-        # Stop gracefully
-        await self.stop()
+        try:
+            # Wait for shutdown signal
+            await self._shutdown_event.wait()
+        except asyncio.CancelledError:
+            logger.info("Runtime cancelled, shutting down...")
+        finally:
+            # Stop gracefully
+            await self.stop()
 
 
 async def main():
     """Main entry point."""
     runtime = AgentBenchRuntime()
-    await runtime.run()
+    try:
+        await runtime.run()
+    except Exception as e:
+        # Log the full traceback for debugging
+        logger.error(f"Fatal error in main: {e}")
+        logger.error(f"Traceback:\n{traceback.format_exc()}")
+        # Re-raise to exit with non-zero code
+        raise
+
+
+def _main_entry_point():
+    """Synchronous entry point for the application.
+
+    Handles the asyncio.run() call with proper error handling.
+    """
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        # Ensure error is printed even if logging is broken
+        print(f"Fatal error: {e}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    _main_entry_point()
