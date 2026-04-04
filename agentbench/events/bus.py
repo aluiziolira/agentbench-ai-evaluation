@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 if TYPE_CHECKING:
@@ -146,7 +145,6 @@ class EventBus:
             )
             raise
 
-    @asynccontextmanager
     async def consume(
         self,
         stream: str,
@@ -158,7 +156,7 @@ class EventBus:
     ) -> AsyncIterator[EventEnvelope]:
         """Consume events from a Redis Stream as part of a consumer group.
 
-        This is an async context manager that yields EventEnvelope objects.
+        This is an async generator that yields EventEnvelope objects.
         Messages must be acknowledged using ack() after processing.
 
         Args:
