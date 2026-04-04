@@ -4,6 +4,7 @@ Tests runtime initialization, service startup, and graceful shutdown.
 """
 
 import asyncio
+import os
 import signal
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -106,10 +107,15 @@ class TestAgentBenchRuntime:
                 "agentbench.main.ScoringEngine", return_value=mock_scoring_engine
             ) as mock_score_class,
             patch("agentbench.main.Aggregator", return_value=mock_aggregator) as mock_agg_class,
+            patch.dict(
+                os.environ,
+                {"MONGODB_URI": "mongodb://localhost:27017", "REDIS_URL": "redis://localhost:6379"},
+                clear=False,
+            ),
         ):
             await runtime.initialize()
 
-            # Verify all storage classes were instantiated
+            # Verify all storage classes were instantiated with env values
             mock_mongo_class.assert_called_once_with("mongodb://localhost:27017", "agentbench")
             mock_redis_class.assert_called_once_with(redis_url="redis://localhost:6379")
             mock_bus_class.assert_called_once_with(

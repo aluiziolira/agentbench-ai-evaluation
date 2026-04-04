@@ -5,6 +5,7 @@ Wires all services together in a single async process.
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -67,15 +68,16 @@ class AgentBenchRuntime:
         """Initialize all services."""
         logger.info("Initializing AgentBench runtime...")
 
-        # Storage
-        mongo_uri = "mongodb://localhost:27017"
-        db_name = "agentbench"
+        # Storage - use environment variables with defaults
+        mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+        db_name = os.environ.get("MONGODB_DB", "agentbench")
 
         self.mongo_storage = MongoStorage(mongo_uri, db_name)
         await self.mongo_storage.setup_indexes()
         logger.info("MongoDB storage initialized")
 
-        self.redis_storage = RedisStorage(redis_url="redis://localhost:6379")
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+        self.redis_storage = RedisStorage(redis_url=redis_url)
         # Ensure Redis client is connected
         _ = await self.redis_storage._get_client()
         logger.info("Redis storage initialized")
