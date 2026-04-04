@@ -206,5 +206,19 @@ def version():
     console.print("AgentBench v0.1.0")
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
+    port: int = typer.Option(8000, "--port", "-p", help="Port to bind to"),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
+):
+    """Start the AgentBench API server."""
+    import uvicorn
+    from agentbench.api.app import app as api_app
+
+    console.print(f"[bold blue]Starting AgentBench API server on {host}:{port}...[/]")
+    uvicorn.run(api_app, host=host, port=port, reload=reload)
+
+
 if __name__ == "__main__":
     app()
