@@ -1,19 +1,18 @@
 """Tests for the LLM judge scoring strategy.
 
 This module tests the LLMJudgeStrategy that evaluates PR review summaries
-against a five-dimension rubric using an LLM (claude-haiku-4-5).
+against a five-dimension rubric using an LLM (gpt-5.4-mini).
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from agentbench.cases.models import ReviewCaseDefinition, ReviewFindingTruth
-from agentbench.models import StepDefinition, ScoringConfig, StepScore
-from agentbench.models.workflow import WorkflowDefinition
+from agentbench.models import ScoringConfig, StepDefinition, StepScore
 from agentbench.scoring.strategies.llm_judge import (
-    LLMJudgeStrategy,
     DEFAULT_JUDGE_MODEL,
-    JUDGE_PROMPT_TEMPLATE,
+    LLMJudgeStrategy,
 )
 
 
@@ -57,8 +56,8 @@ class TestLLMJudgeInitialization:
     """Tests for LLMJudgeStrategy initialization."""
 
     def test_default_judge_model(self):
-        """Test that the default judge model is claude-haiku-4-5-20251001."""
-        assert DEFAULT_JUDGE_MODEL == "claude-haiku-4-5-20251001"
+        """Test that the default judge model is gpt-5.4-mini."""
+        assert DEFAULT_JUDGE_MODEL == "gpt-5.4-mini"
 
     def test_strategy_id(self):
         """Test that strategy_id is 'llm_judge'."""
@@ -66,9 +65,9 @@ class TestLLMJudgeInitialization:
         assert strategy.strategy_id == "llm_judge"
 
     def test_init_with_custom_client(self):
-        """Test initialization with a custom Anthropic client."""
+        """Test initialization with a custom OpenAI client."""
         mock_client = MagicMock()
-        strategy = LLMJudgeStrategy(anthropic_client=mock_client)
+        strategy = LLMJudgeStrategy(client=mock_client)
         assert strategy._client is mock_client
 
 
@@ -175,10 +174,13 @@ class TestScoreMethod:
         """Test successful scoring with mocked judge."""
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"score": 0.85, "reasoning": "Good review"}')]
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        # OpenAI format: choices[0].message.content
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"score": 0.85, "reasoning": "Good review"}'
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-        strategy = LLMJudgeStrategy(anthropic_client=mock_client)
+        strategy = LLMJudgeStrategy(client=mock_client)
 
         score = await strategy.score(
             step=sample_step,
@@ -202,8 +204,8 @@ class TestScoreMethod:
         assert score.details["parse_failed"] is False
 
         # Verify the judge was called
-        mock_client.messages.create.assert_called_once()
-        call_kwargs = mock_client.messages.create.call_args.kwargs
+        mock_client.chat.completions.create.assert_called_once()
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["model"] == DEFAULT_JUDGE_MODEL
         assert call_kwargs["temperature"] == 0
 
@@ -212,10 +214,13 @@ class TestScoreMethod:
         """Test that parse failures return 0.5 with explanation."""
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text="Invalid JSON")]
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        # OpenAI format: choices[0].message.content
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Invalid JSON"
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-        strategy = LLMJudgeStrategy(anthropic_client=mock_client)
+        strategy = LLMJudgeStrategy(client=mock_client)
 
         score = await strategy.score(
             step=sample_step,
@@ -244,10 +249,13 @@ class TestScoreMethod:
 
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"score": 0.80, "reasoning": "Good"}')]
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        # OpenAI format: choices[0].message.content
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"score": 0.80, "reasoning": "Good"}'
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-        strategy = LLMJudgeStrategy(anthropic_client=mock_client)
+        strategy = LLMJudgeStrategy(client=mock_client)
 
         score = await strategy.score(
             step=step_with_weight,
@@ -267,10 +275,13 @@ class TestScoreMethod:
         """Test that scores >= 0.5 are marked as passed."""
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"score": 0.49, "reasoning": "Just below"}')]
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        # OpenAI format: choices[0].message.content
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"score": 0.49, "reasoning": "Just below"}'
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-        strategy = LLMJudgeStrategy(anthropic_client=mock_client)
+        strategy = LLMJudgeStrategy(client=mock_client)
 
         score = await strategy.score(
             step=sample_step,
@@ -292,10 +303,13 @@ class TestTemperatureSetting:
         """Test that temperature is set to 0 for deterministic judging."""
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"score": 0.9, "reasoning": "Great"}')]
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        # OpenAI format: choices[0].message.content
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"score": 0.9, "reasoning": "Great"}'
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-        strategy = LLMJudgeStrategy(anthropic_client=mock_client)
+        strategy = LLMJudgeStrategy(client=mock_client)
 
         step_mock = MagicMock()
         step_mock.step_id = "s2_review_summary"
@@ -310,5 +324,5 @@ class TestTemperatureSetting:
         )
 
         # Verify temperature is 0
-        call_kwargs = mock_client.messages.create.call_args.kwargs
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["temperature"] == 0

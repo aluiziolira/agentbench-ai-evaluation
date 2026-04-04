@@ -1,6 +1,6 @@
 """LLM-based judge scoring strategy for AgentBench.
 
-This module implements the LLMJudgeStrategy that uses an LLM (claude-haiku-4-5)
+This module implements the LLMJudgeStrategy that uses an LLM (gpt-5.4-mini)
 to evaluate the quality of PR review summaries against a rubric with five dimensions.
 """
 
@@ -15,8 +15,8 @@ from agentbench.models.workflow import StepDefinition
 
 logger = logging.getLogger(__name__)
 
-# Default judge model as per spec Section 12.2
-DEFAULT_JUDGE_MODEL = "claude-haiku-4-5-20251001"
+# Default judge model as per spec Section 12.2 - STATIC/FIXED for evaluation independence
+DEFAULT_JUDGE_MODEL = "gpt-5.4-mini"
 
 # Judge prompt template with rubric dimensions from spec Section 12.2
 JUDGE_PROMPT_TEMPLATE = """You are evaluating a PR review summary. Rate it on these dimensions (0.0-1.0 each):
@@ -45,14 +45,17 @@ Return JSON:
 class LLMJudgeStrategy:
     """LLM-based judge strategy for scoring review summaries.
 
-    This strategy uses an LLM to evaluate the quality of a review summary
+    This strategy uses an LLM (gpt-5.4-mini) to evaluate the quality of a review summary
     against a five-dimension rubric. The judge returns a score between
     0.0 and 1.0 with explanatory reasoning.
 
+    The judge model is STATIC and FIXED to "gpt-5.4-mini" to ensure evaluation
+    independence and consistency across all scoring operations.
+
     Attributes:
         strategy_id: Unique identifier for this scoring strategy ("llm_judge").
-        anthropic_client: Optional pre-configured Anthropic client for testing.
-        judge_model: Model identifier to use for judging.
+        _client: Optional pre-configured OpenAI client for testing.
+        _judge_model: Static model identifier (always "gpt-5.4-mini").
 
     Example:
         >>> strategy = LLMJudgeStrategy()
@@ -61,38 +64,37 @@ class LLMJudgeStrategy:
 
     strategy_id: str = "llm_judge"
 
-    def __init__(self, anthropic_client: Any | None = None) -> None:
+    def __init__(self, client: Any | None = None) -> None:
         """Initialize the LLM judge strategy.
 
         Args:
-            anthropic_client: Optional pre-configured Anthropic client.
+            client: Optional pre-configured OpenAI client.
                 If not provided, a new client will be created using default
-                environment configuration (ANTHROPIC_API_KEY).
+                environment configuration (OPENAI_API_KEY).
         """
-        self._client = anthropic_client
+        self._client = client
         self._judge_model = DEFAULT_JUDGE_MODEL
 
     def _get_client(self) -> Any:
-        """Get or create the Anthropic client.
+        """Get or create the OpenAI client.
 
         Returns:
-            Configured Anthropic AsyncAnthropic client.
+            Configured OpenAI AsyncOpenAI client.
 
         Raises:
-            ImportError: If anthropic package is not installed.
+            ImportError: If openai package is not installed.
         """
         if self._client is not None:
             return self._client
 
         try:
-            import anthropic
+            import openai
 
-            self._client = anthropic.AsyncAnthropic()
+            self._client = openai.AsyncOpenAI()
             return self._client
         except ImportError as e:
             raise ImportError(
-                "anthropic package is required for LLMJudgeStrategy. "
-                "Install with: pip install anthropic"
+                "openai package is required for LLMJudgeStrategy. Install with: pip install openai"
             ) from e
 
     def _build_judge_prompt(
@@ -192,7 +194,7 @@ class LLMJudgeStrategy:
         """
         client = self._get_client()
 
-        response = await client.messages.create(
+        response = await client.chat.completions.create(
             model=self._judge_model,
             max_tokens=1024,
             temperature=0,  # Deterministic for consistent judging
@@ -204,11 +206,8 @@ class LLMJudgeStrategy:
             ],
         )
 
-        # Extract text content from response
-        content = response.content
-        if isinstance(content, list) and len(content) > 0:
-            return str(content[0].text)
-        return str(content)
+        # Extract text content from response (OpenAI format)
+        return str(response.choices[0].message.content)
 
     async def score(
         self,
