@@ -26,14 +26,14 @@ class ScoringStrategy(Protocol):
         >>> class MyStrategy:
         ...     strategy_id = "my_strategy"
         ...
-        ...     def score(self, step, response_text, run_id, latency_ms, case):
+        ...     async def score(self, step, response_text, run_id, latency_ms, case):
         ...         # Scoring logic here
         ...         return StepScore(...)
     """
 
     strategy_id: str
 
-    def score(
+    async def score(
         self,
         step: StepDefinition,
         response_text: str,

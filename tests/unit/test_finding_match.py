@@ -74,7 +74,7 @@ def create_agent_response(findings: list[dict[str, Any]]) -> str:
 class TestExactMatch:
     """Tests for exact matching scenarios."""
 
-    def test_exact_match_full_points(
+    async def test_exact_match_full_points(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -94,7 +94,7 @@ class TestExactMatch:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-001", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-001", 1000, base_case)
 
         # Max points: 1.0 (must_detect)
         # Earned: 1.0 base + 0.25 severity bonus = 1.25
@@ -107,7 +107,7 @@ class TestExactMatch:
         assert len(score.details["matches"]) == 1
         assert len(score.details["missed_findings"]) == 0
 
-    def test_exact_match_with_all_fields(
+    async def test_exact_match_with_all_fields(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Exact match should work with all optional fields present."""
@@ -146,7 +146,7 @@ class TestExactMatch:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-002", 1000, case)
+        score = await strategy.score(base_step, response, "run-002", 1000, case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
@@ -156,7 +156,7 @@ class TestExactMatch:
 class TestOptionalFinding:
     """Tests for optional (must_detect=false) findings."""
 
-    def test_optional_finding_half_points(
+    async def test_optional_finding_half_points(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Optional finding match should receive 0.5 base points."""
@@ -193,7 +193,7 @@ class TestOptionalFinding:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-003", 1000, case)
+        score = await strategy.score(base_step, response, "run-003", 1000, case)
 
         # Max points: 0.5 (optional)
         # Earned: 0.5 base + 0.25 severity bonus = 0.75
@@ -201,7 +201,7 @@ class TestOptionalFinding:
         assert score.raw_score == 1.0
         assert score.passed is True
 
-    def test_mixed_must_and_optional_findings(
+    async def test_mixed_must_and_optional_findings(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Case with both must_detect and optional findings."""
@@ -255,7 +255,7 @@ class TestOptionalFinding:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-004", 1000, case)
+        score = await strategy.score(base_step, response, "run-004", 1000, case)
 
         # Max points: 1.0 + 0.5 = 1.5
         # Earned: 1.0 + 0.25 + 0.5 + 0.25 = 2.0
@@ -267,7 +267,7 @@ class TestOptionalFinding:
 class TestFalsePositivePenalty:
     """Tests for false positive detection and penalties."""
 
-    def test_unmatched_finding_penalty(
+    async def test_unmatched_finding_penalty(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -295,7 +295,7 @@ class TestFalsePositivePenalty:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-005", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-005", 1000, base_case)
 
         # Max points: 1.0
         # Earned before penalty: 1.0 + 0.25 = 1.25
@@ -306,7 +306,7 @@ class TestFalsePositivePenalty:
         assert len(score.details["false_positives"]) == 1
         assert score.details["false_positives"][0]["canonical_label"] == "logging_observability_gap"
 
-    def test_multiple_false_positives(
+    async def test_multiple_false_positives(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -342,7 +342,7 @@ class TestFalsePositivePenalty:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-006", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-006", 1000, base_case)
 
         # Max points: 1.0
         # Earned before penalty: 1.25
@@ -356,7 +356,7 @@ class TestFalsePositivePenalty:
 class TestDisallowedFinding:
     """Tests for disallowed finding penalties."""
 
-    def test_disallowed_finding_penalty(
+    async def test_disallowed_finding_penalty(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Each disallowed finding should deduct 0.5 points."""
@@ -404,7 +404,7 @@ class TestDisallowedFinding:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-007", 1000, case)
+        score = await strategy.score(base_step, response, "run-007", 1000, case)
 
         # Max points: 1.0
         # Earned before penalties: 1.0 + 0.25 = 1.25
@@ -416,7 +416,7 @@ class TestDisallowedFinding:
         assert score.details["disallowed_findings"][0]["canonical_label"] == "style_only_nit"
         assert score.details["disallowed_findings"][0]["penalty"] == 0.5
 
-    def test_only_disallowed_finding_zero_score(
+    async def test_only_disallowed_finding_zero_score(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Only disallowed findings with no valid matches results in zero score."""
@@ -457,7 +457,7 @@ class TestDisallowedFinding:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-008", 1000, case)
+        score = await strategy.score(base_step, response, "run-008", 1000, case)
 
         # No matches, only disallowed finding
         # Max points: 1.0
@@ -471,7 +471,7 @@ class TestDisallowedFinding:
 class TestMalformedJson:
     """Tests for parse failure handling."""
 
-    def test_invalid_json_zero_score(
+    async def test_invalid_json_zero_score(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -480,7 +480,7 @@ class TestMalformedJson:
         """Invalid JSON response should result in zero score."""
         response = "This is not valid JSON"
 
-        score = strategy.score(base_step, response, "run-009", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-009", 1000, base_case)
 
         assert score.raw_score == 0.0
         assert score.weighted_score == 0.0
@@ -488,7 +488,7 @@ class TestMalformedJson:
         assert score.details["error"] == "parse_failure"
         assert "findings_count" in score.details
 
-    def test_missing_required_field_zero_score(
+    async def test_missing_required_field_zero_score(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -509,13 +509,13 @@ class TestMalformedJson:
             }
         )
 
-        score = strategy.score(base_step, response, "run-010", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-010", 1000, base_case)
 
         assert score.raw_score == 0.0
         assert score.passed is False
         assert score.details["error"] == "parse_failure"
 
-    def test_invalid_severity_zero_score(
+    async def test_invalid_severity_zero_score(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -536,7 +536,7 @@ class TestMalformedJson:
             }
         )
 
-        score = strategy.score(base_step, response, "run-011", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-011", 1000, base_case)
 
         assert score.raw_score == 0.0
         assert score.passed is False
@@ -545,7 +545,7 @@ class TestMalformedJson:
 class TestLineRangeOverlap:
     """Tests for line range matching with overlap and tolerance."""
 
-    def test_exact_line_match(
+    async def test_exact_line_match(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -565,12 +565,12 @@ class TestLineRangeOverlap:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-012", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-012", 1000, base_case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
 
-    def test_partial_overlap(
+    async def test_partial_overlap(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Partial overlap in line ranges should match."""
@@ -608,12 +608,12 @@ class TestLineRangeOverlap:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-013", 1000, case)
+        score = await strategy.score(base_step, response, "run-013", 1000, case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
 
-    def test_range_within_tolerance_before(
+    async def test_range_within_tolerance_before(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Range within 5 lines before expected should match."""
@@ -651,12 +651,12 @@ class TestLineRangeOverlap:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-014", 1000, case)
+        score = await strategy.score(base_step, response, "run-014", 1000, case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
 
-    def test_range_within_tolerance_after(
+    async def test_range_within_tolerance_after(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Range within 5 lines after expected should match."""
@@ -694,12 +694,12 @@ class TestLineRangeOverlap:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-015", 1000, case)
+        score = await strategy.score(base_step, response, "run-015", 1000, case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
 
-    def test_range_outside_tolerance(
+    async def test_range_outside_tolerance(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Range outside 5 lines tolerance should not match."""
@@ -737,7 +737,7 @@ class TestLineRangeOverlap:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-016", 1000, case)
+        score = await strategy.score(base_step, response, "run-016", 1000, case)
 
         # No match due to line tolerance
         assert score.raw_score == 0.0
@@ -748,7 +748,7 @@ class TestLineRangeOverlap:
 class TestSeverityMismatch:
     """Tests for severity level matching."""
 
-    def test_exact_severity_match_bonus(
+    async def test_exact_severity_match_bonus(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Exact severity match should get the 0.25 bonus."""
@@ -785,14 +785,14 @@ class TestSeverityMismatch:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-017", 1000, case)
+        score = await strategy.score(base_step, response, "run-017", 1000, case)
 
         assert score.raw_score == 1.0  # 1.0 + 0.25 = 1.25 -> clamped
         assert score.details["matches"][0]["severity_match"] == "exact"
         assert score.details["matches"][0]["expected_severity"] == "medium"
         assert score.details["matches"][0]["predicted_severity"] == "medium"
 
-    def test_one_level_severity_mismatch(
+    async def test_one_level_severity_mismatch(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """One-level severity mismatch should match but no bonus."""
@@ -829,14 +829,14 @@ class TestSeverityMismatch:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-018", 1000, case)
+        score = await strategy.score(base_step, response, "run-018", 1000, case)
 
         # No severity bonus, but match counts
         assert score.details["matches"][0]["severity_match"] == "one_level"
         # Score: 1.0 (no bonus), no penalties, max 1.0 -> 1.0
         assert score.raw_score == 1.0
 
-    def test_two_level_severity_mismatch(
+    async def test_two_level_severity_mismatch(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Two-level severity mismatch should match but no bonus."""
@@ -873,13 +873,13 @@ class TestSeverityMismatch:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-019", 1000, case)
+        score = await strategy.score(base_step, response, "run-019", 1000, case)
 
         assert score.details["matches"][0]["severity_match"] == "mismatch"
         # Score: 1.0 (no bonus), no penalties, max 1.0 -> 1.0
         assert score.raw_score == 1.0
 
-    def test_reverse_one_level_mismatch(
+    async def test_reverse_one_level_mismatch(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Severity one level higher should also be one_level mismatch."""
@@ -916,7 +916,7 @@ class TestSeverityMismatch:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-020", 1000, case)
+        score = await strategy.score(base_step, response, "run-020", 1000, case)
 
         assert score.details["matches"][0]["severity_match"] == "one_level"
 
@@ -924,7 +924,7 @@ class TestSeverityMismatch:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
-    def test_empty_findings_list(
+    async def test_empty_findings_list(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -933,14 +933,14 @@ class TestEdgeCases:
         """Empty findings list when there are expected findings should score 0."""
         response = create_agent_response([])
 
-        score = strategy.score(base_step, response, "run-021", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-021", 1000, base_case)
 
         assert score.raw_score == 0.0
         assert score.passed is False
         assert len(score.details["missed_findings"]) == 1
         assert score.details["missed_findings"][0] == "F1"
 
-    def test_no_expected_findings_with_response(
+    async def test_no_expected_findings_with_response(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """When there are no expected findings, any finding is a false positive."""
@@ -967,7 +967,7 @@ class TestEdgeCases:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-022", 1000, case)
+        score = await strategy.score(base_step, response, "run-022", 1000, case)
 
         # Max points: 0, but we start at 1.0 and subtract penalties
         # Penalty: 0.25 for false positive
@@ -977,7 +977,7 @@ class TestEdgeCases:
         assert score.raw_score < 1.0
         assert len(score.details["false_positives"]) == 1
 
-    def test_passed_threshold(
+    async def test_passed_threshold(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Test that passed is True when score >= 0.5."""
@@ -1010,11 +1010,11 @@ class TestEdgeCases:
 
         # Let's test borderline: low score should fail
         response = create_agent_response([])  # No findings
-        score = strategy.score(base_step, response, "run-023", 1000, case)
+        score = await strategy.score(base_step, response, "run-023", 1000, case)
         assert score.raw_score == 0.0
         assert score.passed is False
 
-    def test_details_contains_breakdown(
+    async def test_details_contains_breakdown(
         self,
         strategy: FindingMatchStrategy,
         base_step: StepDefinition,
@@ -1034,7 +1034,7 @@ class TestEdgeCases:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-024", 1000, base_case)
+        score = await strategy.score(base_step, response, "run-024", 1000, base_case)
 
         assert "scoring_breakdown" in score.details
         breakdown = score.details["scoring_breakdown"]
@@ -1047,7 +1047,7 @@ class TestEdgeCases:
 class TestLineRangeEdgeCases:
     """Additional edge cases for line range matching."""
 
-    def test_single_line_finding(
+    async def test_single_line_finding(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Single line findings should match correctly."""
@@ -1084,12 +1084,12 @@ class TestLineRangeEdgeCases:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-025", 1000, case)
+        score = await strategy.score(base_step, response, "run-025", 1000, case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
 
-    def test_exact_tolerance_boundary(
+    async def test_exact_tolerance_boundary(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Test exact boundary of 5-line tolerance."""
@@ -1127,12 +1127,12 @@ class TestLineRangeEdgeCases:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-026", 1000, case)
+        score = await strategy.score(base_step, response, "run-026", 1000, case)
 
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 1
 
-    def test_just_outside_tolerance(
+    async def test_just_outside_tolerance(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Test just outside 5-line tolerance (6 lines away)."""
@@ -1170,7 +1170,7 @@ class TestLineRangeEdgeCases:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-027", 1000, case)
+        score = await strategy.score(base_step, response, "run-027", 1000, case)
 
         # Should NOT match due to tolerance
         assert len(score.details["matches"]) == 0
@@ -1180,7 +1180,7 @@ class TestLineRangeEdgeCases:
 class TestScoringNormalization:
     """Tests for score normalization and clamping."""
 
-    def test_score_clamped_to_one(
+    async def test_score_clamped_to_one(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Raw score should be clamped to maximum of 1.0."""
@@ -1218,14 +1218,14 @@ class TestScoringNormalization:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-028", 1000, case)
+        score = await strategy.score(base_step, response, "run-028", 1000, case)
 
         # 0.5 base + 0.25 bonus = 0.75
         # Max = 0.5
         # 0.75 / 0.5 = 1.5 -> clamped to 1.0
         assert score.raw_score == 1.0
 
-    def test_score_floored_at_zero(
+    async def test_score_floored_at_zero(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Raw score should be floored at minimum of 0.0."""
@@ -1295,7 +1295,7 @@ class TestScoringNormalization:
             ],
         )
 
-        score = strategy.score(base_step, response, "run-029", 1000, case_with_disallowed)
+        score = await strategy.score(base_step, response, "run-029", 1000, case_with_disallowed)
 
         # No matches, penalties: 0.25 (FP) + 0.5 (disallowed) = 0.75
         # Raw would be 0 - 0.75 = -0.75, but floored to 0
@@ -1305,7 +1305,7 @@ class TestScoringNormalization:
 class TestFilePathMatching:
     """Tests for file path matching requirements."""
 
-    def test_file_path_must_match_exactly(
+    async def test_file_path_must_match_exactly(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Different file paths should not match even with same label and lines."""
@@ -1343,7 +1343,7 @@ class TestFilePathMatching:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-030", 1000, case)
+        score = await strategy.score(base_step, response, "run-030", 1000, case)
 
         # Should NOT match due to different file_path
         assert len(score.details["matches"]) == 0
@@ -1354,7 +1354,7 @@ class TestFilePathMatching:
 class TestMultipleExpectedFindings:
     """Tests for cases with multiple expected findings."""
 
-    def test_partial_match_multiple_findings(
+    async def test_partial_match_multiple_findings(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Partial match with multiple expected findings."""
@@ -1410,7 +1410,7 @@ class TestMultipleExpectedFindings:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-031", 1000, case)
+        score = await strategy.score(base_step, response, "run-031", 1000, case)
 
         # Max points: 1.0 + 1.0 + 0.5 = 2.5
         # Earned: 1.0 + 0.25 = 1.25
@@ -1420,7 +1420,7 @@ class TestMultipleExpectedFindings:
         assert len(score.details["matches"]) == 1
         assert len(score.details["missed_findings"]) == 2
 
-    def test_match_all_findings(
+    async def test_match_all_findings(
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Matching all expected findings should give perfect score."""
@@ -1474,7 +1474,7 @@ class TestMultipleExpectedFindings:
             ]
         )
 
-        score = strategy.score(base_step, response, "run-032", 1000, case)
+        score = await strategy.score(base_step, response, "run-032", 1000, case)
 
         # Max points: 1.0 + 1.0 = 2.0
         # Earned: 1.0 + 0.25 + 1.0 + 0.25 = 2.5 -> clamped to 2.0

@@ -169,7 +169,7 @@ def sample_agent_response():
 class TestScoringEngineInit:
     """Test ScoringEngine initialization."""
 
-    def test_init(self, mock_event_bus, mock_mongo_storage, tmp_path):
+    async def test_init(self, mock_event_bus, mock_mongo_storage, tmp_path):
         """Test basic initialization."""
         engine = ScoringEngine(
             event_bus=mock_event_bus,
@@ -186,21 +186,21 @@ class TestScoringEngineInit:
 class TestStrategyResolution:
     """Test strategy resolution."""
 
-    def test_resolve_finding_match_strategy(self, scoring_engine):
+    async def test_resolve_finding_match_strategy(self, scoring_engine):
         """Test resolving finding_match strategy."""
         strategy = scoring_engine._resolve_strategy("finding_match")
 
         assert isinstance(strategy, FindingMatchStrategy)
         assert strategy.strategy_id == "finding_match"
 
-    def test_resolve_llm_judge_strategy(self, scoring_engine):
+    async def test_resolve_llm_judge_strategy(self, scoring_engine):
         """Test resolving llm_judge strategy."""
         strategy = scoring_engine._resolve_strategy("llm_judge")
 
         assert isinstance(strategy, LLMJudgeStrategy)
         assert strategy.strategy_id == "llm_judge"
 
-    def test_resolve_unknown_strategy(self, scoring_engine):
+    async def test_resolve_unknown_strategy(self, scoring_engine):
         """Test resolving unknown strategy raises error."""
         with pytest.raises(
             UnknownStrategyError, match="Unknown scoring strategy: unknown_strategy"
@@ -211,7 +211,7 @@ class TestStrategyResolution:
 class TestRawIOLoading:
     """Test raw I/O file loading."""
 
-    def test_load_raw_io_success(self, scoring_engine, tmp_path):
+    async def test_load_raw_io_success(self, scoring_engine, tmp_path):
         """Test loading existing raw I/O file."""
         run_id = "run-001"
         step_id = "s1_findings"
@@ -240,12 +240,12 @@ class TestRawIOLoading:
         assert result["step_id"] == step_id
         assert result["response"] == "test response"
 
-    def test_load_raw_io_not_found(self, scoring_engine):
+    async def test_load_raw_io_not_found(self, scoring_engine):
         """Test loading non-existent raw I/O file raises error."""
         with pytest.raises(RawIONotFoundError, match="Raw I/O file not found"):
             scoring_engine._load_raw_io("nonexistent", "step-001")
 
-    def test_load_raw_io_malformed_json(self, scoring_engine, tmp_path):
+    async def test_load_raw_io_malformed_json(self, scoring_engine, tmp_path):
         """Test loading malformed JSON raises error."""
         run_id = "run-001"
         step_id = "s1_findings"
@@ -263,13 +263,13 @@ class TestScoreStep:
     """Test individual step scoring."""
 
     @patch("agentbench.scoring.engine.load_case")
-    def test_score_step_finding_match(
+    async def test_score_step_finding_match(
         self, mock_load_case, scoring_engine, sample_step, sample_case, sample_agent_response
     ):
         """Test scoring a step with finding_match strategy."""
         mock_load_case.return_value = sample_case
 
-        score = scoring_engine._score_step(
+        score = await scoring_engine._score_step(
             step=sample_step,
             response_text=sample_agent_response,
             run_id="run-001",
@@ -289,13 +289,13 @@ class TestScoreStep:
         assert score.weighted_score == score.raw_score * 2.0  # weight is 2.0
 
     @patch("agentbench.scoring.engine.load_case")
-    def test_score_step_with_invalid_response(
+    async def test_score_step_with_invalid_response(
         self, mock_load_case, scoring_engine, sample_step, sample_case
     ):
         """Test scoring with invalid JSON response."""
         mock_load_case.return_value = sample_case
 
-        score = scoring_engine._score_step(
+        score = await scoring_engine._score_step(
             step=sample_step,
             response_text="not valid json",
             run_id="run-001",
@@ -646,14 +646,12 @@ class TestEventEmission:
 class TestStop:
     """Test the stop functionality."""
 
-    def test_stop_sets_running_false(self, scoring_engine):
+    async def test_stop_sets_running_false(self, scoring_engine):
         """Test that stop() sets _running to False."""
         scoring_engine._running = True
 
-        # stop is async, so we need to run it
-        import asyncio
-
-        asyncio.run(scoring_engine.stop())
+        # stop is async, so we need to await it
+        await scoring_engine.stop()
 
         assert scoring_engine._running is False
 
@@ -712,7 +710,7 @@ class TestDirectScoreResponse:
 class TestStrategyRegistry:
     """Test the strategy registry."""
 
-    def test_strategy_registry_contents(self):
+    async def test_strategy_registry_contents(self):
         """Test that the registry contains expected strategies."""
         registry = ScoringEngine.STRATEGY_REGISTRY
 
@@ -721,7 +719,7 @@ class TestStrategyRegistry:
         assert registry["finding_match"] == FindingMatchStrategy
         assert registry["llm_judge"] == LLMJudgeStrategy
 
-    def test_strategy_registry_immutability(self):
+    async def test_strategy_registry_immutability(self):
         """Test that the registry can be extended (but not accidentally)."""
         # The registry is a class attribute, so modifications affect all instances
         # But we can add new strategies if needed

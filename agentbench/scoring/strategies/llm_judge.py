@@ -210,7 +210,7 @@ class LLMJudgeStrategy:
             return str(content[0].text)
         return str(content)
 
-    def score(
+    async def score(
         self,
         step: StepDefinition,
         response_text: str,
@@ -218,14 +218,14 @@ class LLMJudgeStrategy:
         latency_ms: int,
         case: ReviewCaseDefinition,
     ) -> StepScore:
-        """Score a review summary using the LLM judge.
+        """Score the review summary using an LLM judge.
 
         Args:
             step: The workflow step definition containing scoring configuration.
-            response_text: The raw text response from the agent (review summary).
+            response_text: The review summary text to evaluate.
             run_id: Unique identifier for this evaluation run.
-            latency_ms: Execution latency in milliseconds.
-            case: The review case definition with ticket and diff data.
+            latency_ms: Latency of the agent response in milliseconds.
+            case: The review case containing ticket and diff context.
 
         Returns:
             StepScore containing the computed score and metadata.
@@ -234,18 +234,11 @@ class LLMJudgeStrategy:
             If the judge response cannot be parsed, returns a neutral score
             of 0.5 with an explanation in the details.
         """
-        import asyncio
-
         # Build the judge prompt
         judge_prompt = self._build_judge_prompt(response_text, case)
 
-        # Invoke the judge (sync wrapper for async call)
-        try:
-            loop = asyncio.get_event_loop()
-            judge_response = loop.run_until_complete(self._invoke_judge(judge_prompt))
-        except RuntimeError:
-            # No event loop running, create a new one
-            judge_response = asyncio.run(self._invoke_judge(judge_prompt))
+        # Invoke the judge (async)
+        judge_response = await self._invoke_judge(judge_prompt)
 
         # Parse the judge response
         try:

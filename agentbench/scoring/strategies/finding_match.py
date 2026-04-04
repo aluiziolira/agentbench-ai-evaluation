@@ -112,7 +112,7 @@ class FindingMatchStrategy:
     # Severity levels for mismatch calculation
     _severity_levels = {"high": 3, "medium": 2, "low": 1}
 
-    def score(
+    async def score(
         self,
         step: StepDefinition,
         response_text: str,

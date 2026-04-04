@@ -143,7 +143,7 @@ class ScoringEngine:
         except json.JSONDecodeError as e:
             raise ValueError(f"Malformed JSON in raw I/O file {io_file}: {e}") from e
 
-    def _score_step(
+    async def _score_step(
         self,
         step: StepDefinition,
         response_text: str,
@@ -168,8 +168,8 @@ class ScoringEngine:
         # Resolve strategy
         strategy = self._resolve_strategy(step.scoring.strategy)
 
-        # Score
-        score = strategy.score(step, response_text, run_id, latency_ms, case)
+        # Score (await async strategy score method)
+        score = await strategy.score(step, response_text, run_id, latency_ms, case)
 
         logger.info(
             f"Scored run {run_id}, step {step.step_id}: "
@@ -284,7 +284,7 @@ class ScoringEngine:
 
         # Score the step
         try:
-            score = self._score_step(
+            score = await self._score_step(
                 step=step,
                 response_text=response_text,
                 run_id=run_id,
@@ -404,7 +404,7 @@ class ScoringEngine:
         fixtures_dir = Path(run.case_set_id)
         case = load_case(run.case_id, fixtures_dir)
 
-        return self._score_step(
+        return await self._score_step(
             step=step,
             response_text=response_text,
             run_id=run.run_id,
