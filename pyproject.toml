@@ -44,7 +44,7 @@ dev = [
 ]
 
 [project.scripts]
-agentbench = "cli.main:main"
+agentbench = "cli.main:app"
 
 [build-system]
 requires = ["hatchling"]
