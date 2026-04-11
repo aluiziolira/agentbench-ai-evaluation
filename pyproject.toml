@@ -100,7 +100,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-markers"
 markers = [
     "integration: marks tests as integration tests (deselect with '-m not integration')",
 ]
@@ -111,6 +111,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.coverage.run]
 source = ["agentbench", "cli"]
 omit = ["tests/*", "*/tests/*"]
+branch = true
 
 [tool.coverage.report]
 exclude_lines = [
@@ -119,3 +120,9 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
 ]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.html]
+directory = "htmlcov"
