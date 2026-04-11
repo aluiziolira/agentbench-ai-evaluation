@@ -1,0 +1,12 @@
+=== gitleaks.toml verification ===
+
+[extend] useDefault = True
+[allowlist] paths = ['\\.env\\.example$']
+
+Assertions:
+- extend.useDefault is True: PASS
+- allowlist.paths has exactly 1 entry: PASS
+- Pattern matches .env.example: PASS
+- No tests/ allowlist: PASS
+- No docs/ allowlist: PASS
+- No **/* wildcard allowlist: PASS

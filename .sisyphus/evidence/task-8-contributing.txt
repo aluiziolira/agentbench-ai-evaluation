@@ -1,0 +1,45 @@
+=== Task 8: CONTRIBUTING.md Verification ===
+Date: 2026-04-11
+
+=== File Created ===
+Path: /home/aluizio/aluizio-projects/worktrees/agentbench-cicd-dx-parity/CONTRIBUTING.md
+Lines: 185
+
+=== Required Sections Present ===
+✓ Prerequisites (Python 3.12+, Docker Compose v2, uv, just)
+✓ Local setup commands (uv sync --dev, uv run pre-commit install, just init)
+✓ Daily workflow commands (just lint, just typecheck, just test-unit, just coverage)
+✓ Integration testing guidance with gated requirements and runtime/api split
+✓ Pre-commit command (just precommit)
+✓ CI parity commands (just ci-pr, just ci-integration)
+
+=== Just Recipe Verification ===
+All documented commands verified in justfile:
+- sync, init, lint, format, typecheck
+- test-unit, test-integration, coverage
+- precommit, ci-pr, ci-integration
+- start, stop, restart, status, logs
+- seed, runtime, api, demo
+
+=== uv Commands Verified ===
+- uv sync --dev (installs dev dependencies)
+- uv run pre-commit install (installs git hooks)
+- uv run mypy . (type checking)
+- uv run ruff check . (linting)
+- uv run ruff format . (formatting)
+- uv run pytest tests/unit (unit tests)
+
+=== Integration Test Gating ===
+Documented that integration tests:
+- Require AGENTBENCH_INTEGRATION_TEST=1 gate flag
+- Need runtime + API services running
+- Make live LLM API calls
+- Are NOT run on every PR
+- Are separated from daily workflow
+
+=== No Migrations Mentioned ===
+✓ No migration references in CONTRIBUTING.md
+
+=== CI Parity Accurate ===
+✓ just ci-pr matches PR workflow (lint + typecheck + coverage)
+✓ just ci-integration matches integration workflow (full stack + gated tests)

@@ -1,0 +1,39 @@
+TASK: 3 - Add Just bootstrap and runtime recipes
+STATUS: PASS
+DATE: 2026-04-11
+
+VERIFICATION COMMAND:
+  just --justfile "/home/aluizio/aluizio-projects/worktrees/agentbench-cicd-dx-parity/justfile" --list
+
+EXPECTED RECIPES:
+  default, sync, init, start, stop, restart, status, logs, seed, runtime, api, demo, clean
+
+ACTUAL RECIPES (13/13):
+  api                       # Start API server
+  clean                     # Clean runtime artifacts
+  default                   # Default: show available recipes
+  demo                      # Demo benchmark run
+  init                      # Full init: sync deps + start infrastructure + seed
+  logs *args="--tail 50 -f" # Tail infrastructure logs
+  restart                   # Restart infrastructure services
+  runtime                   # Start runtime (orchestrator + event bus)
+  seed                      # Seed fixtures into MongoDB
+  start                     # Start infrastructure services (mongodb + redis)
+  status                    # Show infrastructure status
+  stop                      # Stop infrastructure services
+  sync                      # Sync dependencies (uv sync)
+
+SCOPE CHECK:
+  - NO quality/test/ci recipes present: PASS
+  - NO donor-stack strings (manage.py, DATABASE_URL, postgres, docker-compose): PASS
+  - docker compose used (not docker-compose): PASS
+
+COMMAND INTENTS VERIFIED:
+  - start/stop/status/logs use docker compose mongodb+redis: PASS
+  - seed runs uv run python -m cli.main seed: PASS
+  - runtime runs uv run python -m agentbench.main: PASS
+  - api runs uv run python start_api.py: PASS
+  - demo runs benchmark with wf_pr_review_v1 + pr_review_cases_v1: PASS
+
+FILES WRITTEN:
+  /home/aluizio/aluizio-projects/worktrees/agentbench-cicd-dx-parity/justfile

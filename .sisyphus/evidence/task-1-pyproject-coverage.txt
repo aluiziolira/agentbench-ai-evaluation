@@ -1,0 +1,19 @@
+Task 1 Evidence: pyproject.toml coverage contract verification
+Timestamp: 2026-04-11
+
+=== COMMAND ===
+uv run pytest tests/unit -q --cov=agentbench --cov=cli --cov-report=xml --cov-report=html
+
+=== RESULT ===
+330 passed in 9.49s
+Coverage HTML written to dir htmlcov
+Coverage XML written to file coverage.xml
+EXIT_CODE=0
+
+=== VERIFIED CONFIG ===
+- addopts includes --strict-markers: YES
+- coverage run branch = true: YES
+- coverage xml output = "coverage.xml": YES
+- coverage html directory = "htmlcov": YES
+- no fail_under: YES
+- no --cov-fail-under: YES

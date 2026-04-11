@@ -1,0 +1,20 @@
+=== Task 7: .pre-commit-config.yaml verification ===
+Status: PASSED
+
+Assertions checked:
+1. gitleaks hook present in gitleaks repo: OK
+2. ruff lint hook (id=ruff, args=[--fix]) before ruff-format: OK
+3. pre-commit-hooks repo with all required hooks: OK
+   - check-yaml: present
+   - check-toml: present
+   - check-json: present
+   - check-merge-conflict: present
+   - end-of-file-fixer: present
+   - trailing-whitespace: present
+4. local mypy hook: OK
+   - entry: "uv run mypy ." : OK
+   - pass_filenames: false : OK
+   - always_run: true : OK
+
+Repos in config: 4
+All 13 structured assertions passed (0 failures).

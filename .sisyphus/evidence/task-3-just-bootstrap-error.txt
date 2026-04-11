@@ -1,0 +1,7 @@
+TASK: 3 - Add Just bootstrap and runtime recipes (stderr capture)
+STATUS: PASS (no errors)
+DATE: 2026-04-11
+
+STDERR OUTPUT (empty = no errors):
+
+(none)

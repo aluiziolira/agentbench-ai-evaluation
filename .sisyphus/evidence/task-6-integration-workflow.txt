@@ -1,0 +1,21 @@
+Task 6 integration workflow assertions
+Workflow file: /home/aluizio/aluizio-projects/worktrees/agentbench-cicd-dx-parity/.github/workflows/integration.yml
+
+Check results:
+- trigger_push_main: PASS
+- trigger_workflow_dispatch: PASS
+- no_pull_request_trigger: PASS
+- mongodb_service: PASS
+- redis_service: PASS
+- service_ports_published: PASS
+- service_healthchecks: PASS
+- env_gate_and_uris: PASS
+- provider_keys: PASS
+- start_runtime_api: PASS
+- health_wait: PASS
+- gated_selector: PASS
+- logs_always: PASS
+- cleanup_always: PASS
+- no_wrong_stack: PASS
+
+Overall: PASS

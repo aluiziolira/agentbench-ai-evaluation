@@ -1,0 +1,38 @@
+=== Task 4: Just quality and test recipes — error/gating verification ===
+Date: 2026-04-11 (fix pass)
+
+GATING CHECKS:
+
+1. test-integration without AGENTBENCH_INTEGRATION_TEST:
+   Uses shell guard: if [ -z "$AGENTBENCH_INTEGRATION_TEST" ]; then echo "ERROR..." && exit 1; fi
+   Result: PASS — hard exit with clear message if env var not set
+
+2. ci-pr excludes integration tests:
+   Dependency chain: lint -> typecheck -> coverage
+   coverage recipe: uv run pytest tests/unit --cov=agentbench --cov=cli --cov-report=xml --cov-report=html
+   No integration test path anywhere in chain.
+   Result: PASS — confirmed no integration in ci-pr
+
+3. ci-integration does not silently skip gating:
+   - Does NOT depend on foreground-blocking runtime/api recipes
+   - Depends only on sync (install deps) and start (docker compose up mongodb redis)
+   - Inline bash script with set -euo pipefail
+   - AGENTBENCH_INTEGRATION_TEST=1 set explicitly before pytest
+   - /health readiness loop with hard failure after 60s timeout
+   - trap EXIT kills background processes on any failure or normal exit
+   Result: PASS — no silent skip, no foreground block, explicit gating
+
+4. coverage includes both targets:
+   Command: uv run pytest tests/unit --cov=agentbench --cov=cli --cov-report=xml --cov-report=html
+   --cov=agentbench: PRESENT
+   --cov=cli: PRESENT
+   Result: PASS — both coverage targets included
+
+5. precommit runs quality + unit only:
+   Dependency chain: lint -> format -> typecheck -> test-unit
+   No integration dependency.
+   Result: PASS
+
+RETRY NOTES:
+- Fix 1: Added --cov=cli to coverage recipe (was missing cli coverage target)
+- Fix 2: Replaced ci-integration dependency on runtime+api (foreground-blocking) with inline bash that launches them as background processes with a /health readiness loop and cleanup trap
