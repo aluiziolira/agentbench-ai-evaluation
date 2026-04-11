@@ -4,6 +4,7 @@ A minimal AI agent evaluation framework for PR review behavior, built with event
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/agentbench/agentbench/actions/workflows/ci.yml/badge.svg)](https://github.com/agentbench/agentbench/actions/workflows/ci.yml)
 
 ## Project Title
 
@@ -239,7 +240,10 @@ uv run python -m cli.main report {benchmark_id} --watch
 
 ## Testing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full contributor setup including environment configuration, pre-commit hooks, and detailed test workflows.
+
 ### Quick Reference
+
 
 | Test Type | Command | Duration | Requirements |
 |-----------|---------|----------|--------------|
