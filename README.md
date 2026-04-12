@@ -245,7 +245,6 @@ uv run python -m cli.main report {benchmark_id} --watch
 | Test Type | Command | Duration | Requirements |
 |-----------|---------|----------|--------------|
 | Unit | `uv run pytest tests/unit/ -q` | ~5s | None (all mocked) |
-| Integration | `uv run pytest tests/integration/test_pipeline.py -v` | ~100s | Docker, API keys |
 | Coverage | `uv run pytest tests/unit/ --cov=agentbench` | ~10s | None |
 
 **Unit Tests**
@@ -258,11 +257,19 @@ uv run pytest tests/unit/ --cov=agentbench       # With coverage report
 uv run pytest tests/unit/test_adapters.py -v     # Single module
 ```
 
-**Integration Tests**
+**Integration Tests (Manual-Only)**
 
-End-to-end tests verify the full pipeline including LLM calls. Scope: 2 cases x 2 agents = 4 LLM calls, completes in ~100 seconds.
+⚠️  **Never run in CI.** These tests make **real API calls** to OpenAI/Anthropic and cost ~$0.50-1.00 per run. Run manually before releases or when validating infrastructure changes.
 
-Requirements: Docker Compose, `.env` with `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, gate flag `AGENTBENCH_INTEGRATION_TEST=1`, and running services (`start_api.py` and `agentbench.main`).
+Requirements: Docker Compose, `.env` with API keys, gate flag `AGENTBENCH_INTEGRATION_TEST=1`, and running services.
+
+```bash
+# Start infrastructure and services
+just start && just runtime && just api
+
+# Run integration tests (manual only - costs money)
+AGENTBENCH_INTEGRATION_TEST=1 uv run pytest tests/integration/test_pipeline.py -v
+```
 
 Tests validate: multi-agent pipeline completion, single-agent execution, and artifact storage.
 

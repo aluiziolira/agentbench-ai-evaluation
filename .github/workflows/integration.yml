@@ -1,8 +1,6 @@
 name: Integration
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       test_selector:
@@ -10,6 +8,9 @@ on:
         required: false
         default: "tests/integration/test_pipeline.py"
 
+# WARNING: These tests make REAL API calls to OpenAI and Anthropic.
+# They cost money (~$0.50-1.00 per run) and are MANUAL-ONLY.
+# Never enable automatic triggers (push/pull_request) for this workflow.
 permissions:
   contents: read
 

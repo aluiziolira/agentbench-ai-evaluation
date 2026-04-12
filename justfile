@@ -96,10 +96,14 @@ coverage:
 # CI PR gate: lint + typecheck + coverage (no integration)
 ci-pr: lint typecheck coverage
 
-# CI integration: inline background services + readiness + gated integration tests
-ci-integration: sync start
+# CI integration: MANUAL-ONLY local testing with real API calls
+# ⚠️  Costs money (~$0.50-1.00 per run) - Never run in automated CI
+test-manual-integration: sync start
     #!/usr/bin/env bash
     set -euo pipefail
+    echo "⚠️  WARNING: This will make real API calls costing ~$0.50-1.00"
+    echo "Press Ctrl+C to cancel, or wait 3 seconds to continue..."
+    sleep 3
     trap 'kill $(jobs -p) 2>/dev/null' EXIT
     uv run python -m agentbench.main > /tmp/runtime.log 2>&1 &
     uv run python start_api.py > /tmp/api.log 2>&1 &
@@ -113,7 +117,6 @@ ci-integration: sync start
     done
     curl -sf http://localhost:8000/health > /dev/null 2>&1 || { echo "ERROR: API not ready after 60s"; cat /tmp/api.log; exit 1; }
     AGENTBENCH_INTEGRATION_TEST=1 uv run pytest tests/integration/test_pipeline.py -q
-
 # Pre-commit hook: lint + format + typecheck + unit tests
 precommit: lint format typecheck test-unit
 
