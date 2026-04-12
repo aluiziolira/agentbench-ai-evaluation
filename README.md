@@ -240,10 +240,7 @@ uv run python -m cli.main report {benchmark_id} --watch
 
 ## Testing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full contributor setup including environment configuration, pre-commit hooks, and detailed test workflows.
-
 ### Quick Reference
-
 
 | Test Type | Command | Duration | Requirements |
 |-----------|---------|----------|--------------|
@@ -251,9 +248,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full contributor setup including envi
 | Integration | `uv run pytest tests/integration/test_pipeline.py -v` | ~100s | Docker, API keys |
 | Coverage | `uv run pytest tests/unit/ --cov=agentbench` | ~10s | None |
 
-### Unit Tests
+**Unit Tests**
 
-Unit tests mock external dependencies and run in ~5 seconds (330 tests). Coverage spans adapters, storage, orchestration, scoring, API, CLI, and workflow validation.
+Mock external dependencies and run in ~5 seconds (330 tests). Coverage spans adapters, storage, orchestration, scoring, API, CLI, and workflow validation.
 
 ```bash
 uv run pytest tests/unit/ -q                    # All unit tests
@@ -261,23 +258,13 @@ uv run pytest tests/unit/ --cov=agentbench       # With coverage report
 uv run pytest tests/unit/test_adapters.py -v     # Single module
 ```
 
-### Integration Tests
+**Integration Tests**
 
-End-to-end tests verify the full pipeline including LLM calls, scoring, and artifact storage. Scope: 2 cases x 2 agents = 4 LLM calls, completes in ~100 seconds.
+End-to-end tests verify the full pipeline including LLM calls. Scope: 2 cases x 2 agents = 4 LLM calls, completes in ~100 seconds.
 
-**Requirements:**
+Requirements: Docker Compose, `.env` with `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, gate flag `AGENTBENCH_INTEGRATION_TEST=1`, and running services (`start_api.py` and `agentbench.main`).
 
-| Requirement | Purpose |
-|-------------|---------|
-| Docker & Docker Compose | MongoDB and Redis containers |
-| `.env` with API keys | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
-| `AGENTBENCH_INTEGRATION_TEST=1` | Gate flag (must be set) |
-| API server + runtime | `start_api.py` and `agentbench.main` running |
-
-**Tests validate:**
-1. `test_full_benchmark_pipeline` - Multi-agent pipeline completion
-2. `test_benchmark_with_single_agent` - Single-agent execution
-3. `test_list_benchmark_runs` - API endpoints and artifact storage
+Tests validate: multi-agent pipeline completion, single-agent execution, and artifact storage.
 
 ## API Endpoints
 
