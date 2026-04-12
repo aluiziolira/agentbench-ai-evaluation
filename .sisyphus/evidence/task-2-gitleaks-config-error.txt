@@ -1,5 +1,0 @@
-=== gitleaks.toml verification (error output) ===
-
-No errors encountered during verification.
-
-All checks passed successfully.

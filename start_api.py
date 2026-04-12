@@ -3,14 +3,15 @@
 
 import os
 import sys
+from pathlib import Path
 
 # Add project to path
-sys.path.insert(0, "/home/aluizio/aluizio-projects/agentbench-ai-evaluation")
+sys.path.insert(0, str(Path(__file__).parent))
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
 
-load_dotenv("/home/aluizio/aluizio-projects/agentbench-ai-evaluation/.env")
+load_dotenv(Path(__file__).parent / ".env")
 
 # Import and start the API
 import uvicorn
