@@ -322,8 +322,10 @@ class TestErrorHandling:
         runtime._setup_signal_handlers = MagicMock()
 
         # Simulate initialization failure
-        with patch.object(runtime, "initialize", side_effect=Exception("Init failed")), \
-                pytest.raises(Exception, match="Init failed"):
+        with (
+            patch.object(runtime, "initialize", side_effect=Exception("Init failed")),
+            pytest.raises(Exception, match="Init failed"),
+        ):
             await runtime.run()
 
     @pytest.mark.asyncio

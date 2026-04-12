@@ -45,12 +45,14 @@ class EventBus:
 
         expected_stream = get_stream_for_event(event.event_type)
         if stream != expected_stream:
-            raise ValueError(f"Event type '{event.event_type}' should be published to '{expected_stream}'")
+            raise ValueError(
+                f"Event type '{event.event_type}' should be published to '{expected_stream}'"
+            )
 
         validate_event_envelope(event)
 
         if "run_id" in event.payload and event.correlation_id != event.payload["run_id"]:
-                raise ValueError("correlation_id must equal run_id")
+            raise ValueError("correlation_id must equal run_id")
 
         validate_payload(event.payload)
 
@@ -159,6 +161,7 @@ class EventBus:
                     },
                 )
                 import asyncio
+
                 await asyncio.sleep(1)
             except Exception as e:
                 self._logger.error(
@@ -170,6 +173,7 @@ class EventBus:
                     },
                 )
                 import asyncio
+
                 await asyncio.sleep(1)
 
     def _deserialize_event(self, fields: dict) -> EventEnvelope:

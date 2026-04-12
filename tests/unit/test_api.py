@@ -62,19 +62,21 @@ def mock_event_bus():
 def test_client(mock_mongo_storage, mock_redis_storage, mock_event_bus):
     """Create a test client with mocked dependencies."""
     # Patch the lifespan to inject mock dependencies
-    with patch("agentbench.api.app.MongoStorage") as mock_mongo_cls, \
-            patch("agentbench.api.app.RedisStorage") as mock_redis_cls, \
-            patch("agentbench.api.app.EventBus") as mock_bus_cls:
-                mock_mongo_cls.return_value = mock_mongo_storage
-                mock_redis_cls.return_value = mock_redis_storage
-                mock_bus_cls.return_value = mock_event_bus
+    with (
+        patch("agentbench.api.app.MongoStorage") as mock_mongo_cls,
+        patch("agentbench.api.app.RedisStorage") as mock_redis_cls,
+        patch("agentbench.api.app.EventBus") as mock_bus_cls,
+    ):
+        mock_mongo_cls.return_value = mock_mongo_storage
+        mock_redis_cls.return_value = mock_redis_storage
+        mock_bus_cls.return_value = mock_event_bus
 
-                client = TestClient(app)
-                # Manually set the state on app.state
-                app.state.mongo = mock_mongo_storage
-                app.state.redis = mock_redis_storage
-                app.state.event_bus = mock_event_bus
-                yield client
+        client = TestClient(app)
+        # Manually set the state on app.state
+        app.state.mongo = mock_mongo_storage
+        app.state.redis = mock_redis_storage
+        app.state.event_bus = mock_event_bus
+        yield client
 
 
 class TestHealthEndpoint:

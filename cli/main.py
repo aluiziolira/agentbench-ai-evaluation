@@ -22,7 +22,7 @@ def run(
         ["gpt-4o-mini", "claude-haiku-4-5"], "--agents", "-a", help="Agent IDs"
     ),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
-    ):
+):
     import uuid
 
     import httpx

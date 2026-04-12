@@ -1481,7 +1481,3 @@ class TestMultipleExpectedFindings:
         assert score.raw_score == 1.0
         assert len(score.details["matches"]) == 2
         assert len(score.details["missed_findings"]) == 0
-
-
-
-

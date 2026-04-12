@@ -563,4 +563,3 @@ class TestAdapterRegistry:
             assert adapter.agent_id == agent_id, (
                 f"Registry key {agent_id} must match adapter.agent_id"
             )
-

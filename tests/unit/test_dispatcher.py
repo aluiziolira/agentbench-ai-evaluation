@@ -252,12 +252,14 @@ class TestDispatchStep:
         mock_adapter.agent_id = "gpt-4o-mini"
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
-        with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock), \
-                patch(
+        with (
+            patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock),
+            patch(
                 "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
                 return_value=mock_adapter,
-            ), \
-                patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+            ),
+            patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
+        ):
             await dispatcher._dispatch_step(sample_run, sample_step)
         mock_event_bus.publish.assert_called_once()
         call_args = mock_event_bus.publish.call_args
@@ -280,11 +282,14 @@ class TestDispatchStep:
         mock_adapter.agent_id = "gpt-4o-mini"
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
-        with patch(
-            "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
-            return_value=mock_adapter,
-        ), patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case), \
-                patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist:
+        with (
+            patch(
+                "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
+                return_value=mock_adapter,
+            ),
+            patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
+            patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist,
+        ):
             await dispatcher._dispatch_step(sample_run, sample_step)
 
         # Verify persistence was called with correct args
@@ -304,10 +309,13 @@ class TestDispatchStep:
         """Test that unknown agent_id raises ValueError."""
         sample_run.agent_id = "unknown-agent"
 
-        with pytest.raises(ValueError, match="Unknown agent_id: unknown-agent"), \
-                patch("agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get", return_value=None), \
-                patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+        with (
+            pytest.raises(ValueError, match="Unknown agent_id: unknown-agent"),
+            patch("agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get", return_value=None),
+            patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
+        ):
             await dispatcher._dispatch_step(sample_run, sample_step)
+
     """Test timeout handling during agent invocation."""
 
     @pytest.mark.asyncio
@@ -328,10 +336,13 @@ class TestDispatchStep:
         # Set a short timeout
         sample_step.timeout_ms = 100  # 100ms timeout
 
-        with patch(
-            "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
-            return_value=mock_adapter,
-        ), patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+        with (
+            patch(
+                "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
+                return_value=mock_adapter,
+            ),
+            patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
+        ):
             await dispatcher._dispatch_step(sample_run, sample_step)
 
         # Verify timeout event was published
@@ -361,12 +372,14 @@ class TestDispatchStep:
         mock_adapter.invoke = slow_invoke
         sample_step.timeout_ms = 100
 
-        with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock), \
-                patch(
+        with (
+            patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock),
+            patch(
                 "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
                 return_value=mock_adapter,
-            ), \
-                patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+            ),
+            patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
+        ):
             await dispatcher._dispatch_step(sample_run, sample_step)
 
 
@@ -410,10 +423,13 @@ class TestMainLoop:
 
         mock_event_bus.consume = mock_consume
 
-        with patch(
-            "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
-            return_value=mock_adapter,
-        ), patch("agentbench.dispatcher.dispatcher.load_case") as mock_load_case:
+        with (
+            patch(
+                "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
+                return_value=mock_adapter,
+            ),
+            patch("agentbench.dispatcher.dispatcher.load_case") as mock_load_case,
+        ):
             mock_load_case.return_value = MagicMock(
                 case_id="pr_001",
                 case_set_id="pr_review_cases_v1",

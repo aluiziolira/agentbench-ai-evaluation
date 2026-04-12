@@ -162,10 +162,7 @@ class TestWorkflowValidation:
         step1 = next(s for s in workflow.steps if s.step_id == "s1_findings")
 
         # Verify key phrases from the spec prompt are present
-        assert (
-            "You are reviewing a pull request as a senior software engineer"
-            in step1.input
-        )
+        assert "You are reviewing a pull request as a senior software engineer" in step1.input
         assert "Return JSON only with this schema" in step1.input
         assert '"findings":' in step1.input
         assert "canonical_label" in step1.input

@@ -230,9 +230,7 @@ class TestWorkflowCRUD:
         assert "wf_test1" in ids
         assert "wf_test2" in ids
 
-    async def test_create_duplicate_workflow_raises(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_create_duplicate_workflow_raises(self, storage: MongoStorage) -> None:
         """Test creating duplicate workflow raises DuplicateKeyError."""
         workflow = create_test_workflow("wf_test", "1.0.0")
         await storage.create_workflow(workflow)
@@ -252,9 +250,7 @@ class TestWorkflowImmutability:
         is_mutable = await storage._check_workflow_mutable("wf_test", "1.0.0")
         assert is_mutable is True
 
-    async def test_check_workflow_mutable_published(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_check_workflow_mutable_published(self, storage: MongoStorage) -> None:
         """Test that published workflows are not mutable."""
         workflow = create_test_workflow("wf_test", "1.0.0", "published")
         await storage.create_workflow(workflow)
@@ -262,9 +258,7 @@ class TestWorkflowImmutability:
         is_mutable = await storage._check_workflow_mutable("wf_test", "1.0.0")
         assert is_mutable is False
 
-    async def test_enforce_immutability_raises_for_published(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_enforce_immutability_raises_for_published(self, storage: MongoStorage) -> None:
         """Test enforcing immutability raises for published workflows."""
         workflow = create_test_workflow("wf_test", "1.0.0", "published")
         await storage.create_workflow(workflow)
@@ -285,9 +279,7 @@ class TestWorkflowImmutability:
         assert retrieved.status == "published"
         assert retrieved.published_at is not None
 
-    async def test_publish_already_published_workflow(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_publish_already_published_workflow(self, storage: MongoStorage) -> None:
         """Test publishing an already published workflow is idempotent."""
         workflow = create_test_workflow("wf_test", "1.0.0", "published")
         await storage.create_workflow(workflow)
@@ -295,9 +287,7 @@ class TestWorkflowImmutability:
         # Should not raise
         await storage.publish_workflow("wf_test", "1.0.0")
 
-    async def test_publish_nonexistent_workflow_raises(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_publish_nonexistent_workflow_raises(self, storage: MongoStorage) -> None:
         """Test publishing non-existent workflow raises error."""
         with pytest.raises(WorkflowNotFoundError):
             await storage.publish_workflow("nonexistent", "1.0.0")
@@ -342,9 +332,7 @@ class TestRunCRUD:
         assert retrieved.state == RunState.STARTED
         assert retrieved.current_step == 0
 
-    async def test_update_run_state_with_completion(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_update_run_state_with_completion(self, storage: MongoStorage) -> None:
         """Test updating run state to completed sets completed_at."""
         run = create_test_run(state=RunState.STARTED)
         await storage.create_run(run)
@@ -418,9 +406,7 @@ class TestRunReportCRUD:
         result = await storage.get_run_report("nonexistent")
         assert result is None
 
-    async def test_create_duplicate_run_report_raises(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_create_duplicate_run_report_raises(self, storage: MongoStorage) -> None:
         """Test creating duplicate run report raises DuplicateKeyError."""
         report = create_test_run_report()
         await storage.create_run_report(report)
@@ -449,9 +435,7 @@ class TestBenchmarkReportCRUD:
         result = await storage.get_benchmark_report("nonexistent")
         assert result is None
 
-    async def test_create_duplicate_benchmark_report_raises(
-        self, storage: MongoStorage
-    ) -> None:
+    async def test_create_duplicate_benchmark_report_raises(self, storage: MongoStorage) -> None:
         """Test creating duplicate benchmark report raises DuplicateKeyError."""
         report = create_test_benchmark_report()
         await storage.create_benchmark_report(report)
