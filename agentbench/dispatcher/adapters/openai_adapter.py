@@ -8,7 +8,7 @@ import os
 import time
 from typing import Any
 
-from openai import AsyncOpenAI, AuthenticationError, RateLimitError, Timeout
+from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from agentbench.dispatcher.adapters.base import AgentAdapter
 from agentbench.models.run import EvaluationRun
@@ -156,7 +156,7 @@ class OpenAIAdapter:
                 self._make_api_call(messages),
                 timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise TimeoutError(f"OpenAI request timed out after {timeout_seconds}s") from e
 
     async def _make_api_call(self, messages: list[dict[str, Any]]) -> Any:

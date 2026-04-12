@@ -8,11 +8,12 @@ real API keys. It validates:
 - Final benchmark report is generated
 """
 
-import os
-import pytest
 import asyncio
-import httpx
+import os
 from pathlib import Path
+
+import httpx
+import pytest
 
 # Skip all integration tests unless explicitly enabled
 pytestmark = pytest.mark.skipif(

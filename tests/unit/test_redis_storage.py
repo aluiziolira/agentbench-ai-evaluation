@@ -1,7 +1,7 @@
 """Tests for Redis storage layer."""
 
-import pytest
 import fakeredis.aioredis as aioredis
+import pytest
 
 from agentbench.models.run import RunState
 from agentbench.storage.redis_client import RedisStorage

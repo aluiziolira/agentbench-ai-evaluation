@@ -10,10 +10,10 @@ Example:
     >>> text, latency = await adapter.invoke(step, run, [])
 """
 
-from typing import Callable
+from collections.abc import Callable
 
-from agentbench.dispatcher.adapters.base import AgentAdapter
 from agentbench.dispatcher.adapters.anthropic_adapter import AnthropicAdapter
+from agentbench.dispatcher.adapters.base import AgentAdapter
 from agentbench.dispatcher.adapters.openai_adapter import OpenAIAdapter
 
 

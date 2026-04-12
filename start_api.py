@@ -5,17 +5,18 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 # Load environment variables from .env file
-from dotenv import load_dotenv
-
 load_dotenv(Path(__file__).parent / ".env")
 
 # Import and start the API
-import uvicorn
-from agentbench.api.app import app
+import uvicorn  # noqa: E402
+
+from agentbench.api.app import app  # noqa: E402
 
 if __name__ == "__main__":
     print(f"Starting API with MONGODB_URI={os.environ.get('MONGODB_URI', 'NOT SET')}")

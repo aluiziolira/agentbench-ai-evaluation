@@ -1,7 +1,8 @@
 """Review case models for AgentBench."""
 
-from pydantic import BaseModel, Field, field_validator
-from typing import Literal, Tuple
+from typing import Literal
+
+from pydantic import BaseModel, field_validator
 
 
 class ReviewFindingTruth(BaseModel):
@@ -9,13 +10,13 @@ class ReviewFindingTruth(BaseModel):
     canonical_label: str
     severity: Literal["high", "medium", "low"]
     file_path: str
-    line_span: Tuple[int, int]
+    line_span: tuple[int, int]
     must_detect: bool = True
     summary: str
 
     @field_validator("line_span")
     @classmethod
-    def validate_line_span(cls, v: Tuple[int, int]) -> Tuple[int, int]:
+    def validate_line_span(cls, v: tuple[int, int]) -> tuple[int, int]:
         if v[0] > v[1]:
             raise ValueError("line_span start must be <= end")
         return v

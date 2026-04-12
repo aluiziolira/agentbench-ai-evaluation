@@ -2,7 +2,6 @@
 
 from pydantic import BaseModel
 
-
 EVALUATION_RUN_REQUESTED = "evaluation.run.requested"
 EVALUATION_RUN_STARTED = "evaluation.run.started"
 EVALUATION_RUN_COMPLETED = "evaluation.run.completed"

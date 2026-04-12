@@ -20,9 +20,8 @@ Service Contract (spec Section 9.4):
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Type
 
 from agentbench.cases.loader import load_case
 from agentbench.cases.models import ReviewCaseDefinition
@@ -73,7 +72,7 @@ class ScoringEngine:
         _running: Flag to control the main loop.
     """
 
-    STRATEGY_REGISTRY: dict[str, Type[ScoringStrategy]] = {
+    STRATEGY_REGISTRY: dict[str, type[ScoringStrategy]] = {
         "finding_match": FindingMatchStrategy,
         "llm_judge": LLMJudgeStrategy,
     }
@@ -138,7 +137,7 @@ class ScoringEngine:
             raise RawIONotFoundError(f"Raw I/O file not found: {io_file}")
 
         try:
-            with open(io_file, "r", encoding="utf-8") as f:
+            with open(io_file, encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError as e:
             raise ValueError(f"Malformed JSON in raw I/O file {io_file}: {e}") from e
@@ -343,7 +342,7 @@ class ScoringEngine:
                     event = EventEnvelope(
                         event_id=str(uuid.uuid4()),
                         event_type=STEP_SCORED,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        timestamp=datetime.now(UTC).isoformat(),
                         correlation_id=envelope.payload.get("run_id", ""),
                         payload={
                             "run_id": score.run_id,

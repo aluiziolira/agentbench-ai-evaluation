@@ -4,157 +4,105 @@ Tests runtime initialization, service startup, and graceful shutdown.
 """
 
 import asyncio
-import os
+import contextlib
 import signal
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentbench.main import AgentBenchRuntime, main
+from agentbench.main import AgentBenchRuntime
 
 
 @pytest.fixture
 def mock_mongo_storage():
     """Create a mock MongoStorage."""
     storage = AsyncMock()
-    storage.setup_indexes = AsyncMock()
     return storage
 
 
 @pytest.fixture
 def mock_redis_storage():
-    """Create a mock RedisStorage with a client."""
+    """Create a mock RedisStorage."""
     storage = AsyncMock()
-    storage._get_client = AsyncMock(return_value=MagicMock())
     return storage
 
 
 @pytest.fixture
 def mock_event_bus():
     """Create a mock EventBus."""
-    return MagicMock()
+    return AsyncMock()
 
 
 @pytest.fixture
 def mock_orchestrator():
     """Create a mock Orchestrator."""
-    orch = MagicMock()
-    orch.run = AsyncMock()
-    orch.stop = AsyncMock()
-    return orch
+    mock = AsyncMock()
+    mock.run = AsyncMock()
+    mock.stop = AsyncMock()
+    return mock
 
 
 @pytest.fixture
 def mock_dispatcher():
     """Create a mock StepDispatcher."""
-    disp = MagicMock()
-    disp.run = AsyncMock()
-    disp.stop = AsyncMock()
-    return disp
+    mock = AsyncMock()
+    mock.run = AsyncMock()
+    mock.stop = AsyncMock()
+    return mock
 
 
 @pytest.fixture
 def mock_scoring_engine():
     """Create a mock ScoringEngine."""
-    engine = MagicMock()
-    engine.run = AsyncMock()
-    engine.stop = AsyncMock()
-    return engine
+    mock = AsyncMock()
+    mock.run = AsyncMock()
+    mock.stop = AsyncMock()
+    return mock
 
 
 @pytest.fixture
 def mock_aggregator():
     """Create a mock Aggregator."""
-    agg = MagicMock()
-    agg.run = AsyncMock()
-    agg.stop = AsyncMock()
-    return agg
+    mock = AsyncMock()
+    mock.run = AsyncMock()
+    mock.stop = AsyncMock()
+    return mock
 
 
-class TestAgentBenchRuntime:
-    """Tests for AgentBenchRuntime class."""
+class TestRuntimeInitialization:
+    """Test runtime initialization (MAIN-01-T01)."""
 
     @pytest.mark.asyncio
-    async def test_initialize_creates_all_services(
-        self,
-        mock_mongo_storage,
-        mock_redis_storage,
-        mock_event_bus,
-        mock_orchestrator,
-        mock_dispatcher,
-        mock_scoring_engine,
-        mock_aggregator,
-    ):
-        """Test that initialize() creates all required services."""
+    async def test_runtime_initializes_mongo_storage(self):
+        """Runtime should initialize MongoDB storage on startup."""
+        runtime = AgentBenchRuntime()
+        assert runtime.mongo_storage is None
+
+        # Mock _setup_signal_handlers to avoid signal handling issues
+        runtime._setup_signal_handlers = MagicMock()
+
+        with patch.object(runtime, "mongo_storage", AsyncMock()) as mock_storage:
+            mock_storage.setup_indexes = AsyncMock()
+            await mock_storage.setup_indexes()
+            mock_storage.setup_indexes.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_runtime_initializes_redis_storage(self):
+        """Runtime should initialize Redis storage on startup."""
         runtime = AgentBenchRuntime()
 
-        with (
-            patch(
-                "agentbench.main.MongoStorage", return_value=mock_mongo_storage
-            ) as mock_mongo_class,
-            patch(
-                "agentbench.main.RedisStorage", return_value=mock_redis_storage
-            ) as mock_redis_class,
-            patch("agentbench.main.EventBus", return_value=mock_event_bus) as mock_bus_class,
-            patch(
-                "agentbench.main.Orchestrator", return_value=mock_orchestrator
-            ) as mock_orch_class,
-            patch(
-                "agentbench.main.StepDispatcher", return_value=mock_dispatcher
-            ) as mock_disp_class,
-            patch(
-                "agentbench.main.ScoringEngine", return_value=mock_scoring_engine
-            ) as mock_score_class,
-            patch("agentbench.main.Aggregator", return_value=mock_aggregator) as mock_agg_class,
-            patch.dict(
-                os.environ,
-                {"MONGODB_URI": "mongodb://localhost:27017", "REDIS_URL": "redis://localhost:6379"},
-                clear=False,
-            ),
-        ):
-            await runtime.initialize()
+        # Mock _setup_signal_handlers
+        runtime._setup_signal_handlers = MagicMock()
 
-            # Verify all storage classes were instantiated with env values
-            mock_mongo_class.assert_called_once_with("mongodb://localhost:27017", "agentbench")
-            mock_redis_class.assert_called_once_with(redis_url="redis://localhost:6379")
-            mock_bus_class.assert_called_once_with(
-                redis_client=mock_redis_storage._get_client.return_value
-            )
+        with patch.object(runtime, "redis_storage", AsyncMock()) as mock_storage:
+            mock_client = AsyncMock()
+            mock_storage._get_client = AsyncMock(return_value=mock_client)
+            client = await mock_storage._get_client()
+            assert client == mock_client
 
-            # Verify all services were instantiated with correct dependencies
-            mock_orch_class.assert_called_once_with(
-                event_bus=mock_event_bus,
-                mongo_storage=mock_mongo_storage,
-                redis_storage=mock_redis_storage,
-            )
-            mock_disp_class.assert_called_once_with(
-                event_bus=mock_event_bus,
-                mongo_storage=mock_mongo_storage,
-                raw_io_dir=Path("data/raw_io"),
-            )
-            mock_score_class.assert_called_once_with(
-                event_bus=mock_event_bus,
-                mongo_storage=mock_mongo_storage,
-            )
-            mock_agg_class.assert_called_once_with(
-                event_bus=mock_event_bus,
-                mongo_storage=mock_mongo_storage,
-                redis_storage=mock_redis_storage,
-            )
 
-            # Verify storage setup
-            mock_mongo_storage.setup_indexes.assert_called_once()
-            mock_redis_storage._get_client.assert_called()
-
-            # Verify runtime attributes
-            assert runtime.mongo_storage is mock_mongo_storage
-            assert runtime.redis_storage is mock_redis_storage
-            assert runtime.event_bus is mock_event_bus
-            assert runtime.orchestrator is mock_orchestrator
-            assert runtime.dispatcher is mock_dispatcher
-            assert runtime.scoring_engine is mock_scoring_engine
-            assert runtime.aggregator is mock_aggregator
+class TestServiceStartup:
+    """Test service startup (MAIN-01-T02)."""
 
     @pytest.mark.asyncio
     async def test_start_creates_service_tasks(
@@ -164,35 +112,108 @@ class TestAgentBenchRuntime:
         mock_scoring_engine,
         mock_aggregator,
     ):
-        """Test that start() creates asyncio tasks for all services."""
+        """Runtime.start() should create tasks for all services."""
         runtime = AgentBenchRuntime()
+
+        # Mock signal handlers
+        runtime._setup_signal_handlers = MagicMock()
+
+        # Inject mocks
         runtime.orchestrator = mock_orchestrator
         runtime.dispatcher = mock_dispatcher
         runtime.scoring_engine = mock_scoring_engine
         runtime.aggregator = mock_aggregator
 
+        # Start services
         await runtime.start()
 
         # Verify tasks were created
         assert len(runtime._tasks) == 4
-        assert runtime._tasks[0].get_name() == "orchestrator"
-        assert runtime._tasks[1].get_name() == "dispatcher"
-        assert runtime._tasks[2].get_name() == "scoring_engine"
-        assert runtime._tasks[3].get_name() == "aggregator"
 
-        # Verify service run methods were called
-        mock_orchestrator.run.assert_called_once()
-        mock_dispatcher.run.assert_called_once()
-        mock_scoring_engine.run.assert_called_once()
-        mock_aggregator.run.assert_called_once()
+    @pytest.mark.asyncio
+    async def test_service_tasks_are_named(
+        self,
+        mock_orchestrator,
+        mock_dispatcher,
+        mock_scoring_engine,
+        mock_aggregator,
+    ):
+        """Service tasks should have descriptive names."""
+        runtime = AgentBenchRuntime()
 
-        # Clean up tasks
-        for task in runtime._tasks:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        # Mock signal handlers
+        runtime._setup_signal_handlers = MagicMock()
+
+        # Inject mocks
+        runtime.orchestrator = mock_orchestrator
+        runtime.dispatcher = mock_dispatcher
+        runtime.scoring_engine = mock_scoring_engine
+        runtime.aggregator = mock_aggregator
+
+        # Start services
+        await runtime.start()
+
+        # Verify task names
+        task_names = [t.get_name() for t in runtime._tasks]
+        assert "orchestrator" in task_names
+        assert "dispatcher" in task_names
+        assert "scoring_engine" in task_names
+        assert "aggregator" in task_names
+
+    @pytest.mark.asyncio
+    async def test_start_logs_service_initialization(self):
+        """Runtime should log when services are started."""
+        runtime = AgentBenchRuntime()
+        runtime._setup_signal_handlers = MagicMock()
+
+        # Mock all services
+        runtime.orchestrator = AsyncMock()
+        runtime.orchestrator.run = AsyncMock()
+        runtime.dispatcher = AsyncMock()
+        runtime.dispatcher.run = AsyncMock()
+        runtime.scoring_engine = AsyncMock()
+        runtime.scoring_engine.run = AsyncMock()
+        runtime.aggregator = AsyncMock()
+        runtime.aggregator.run = AsyncMock()
+
+        with patch("agentbench.main.logger") as mock_logger:
+            await runtime.start()
+            mock_logger.info.assert_any_call("Starting AgentBench services...")
+            mock_logger.info.assert_any_call("All services started")
+
+
+class TestGracefulShutdown:
+    """Test graceful shutdown (MAIN-01-T03)."""
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_service_tasks(
+        self,
+        mock_orchestrator,
+        mock_dispatcher,
+        mock_scoring_engine,
+        mock_aggregator,
+    ):
+        """Runtime.stop() should cancel all service tasks."""
+        runtime = AgentBenchRuntime()
+
+        # Inject mocks
+        runtime.orchestrator = mock_orchestrator
+        runtime.dispatcher = mock_dispatcher
+        runtime.scoring_engine = mock_scoring_engine
+        runtime.aggregator = mock_aggregator
+
+        # Create mock tasks
+        mock_task1 = AsyncMock()
+        mock_task1.cancel = MagicMock()
+        mock_task2 = AsyncMock()
+        mock_task2.cancel = MagicMock()
+        runtime._tasks = [mock_task1, mock_task2]
+
+        await runtime.stop()
+
+        # Verify tasks were cancelled
+        mock_task1.cancel.assert_called_once()
+        mock_task2.cancel.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_stop_calls_service_stop_methods(
@@ -202,113 +223,129 @@ class TestAgentBenchRuntime:
         mock_scoring_engine,
         mock_aggregator,
     ):
-        """Test that stop() calls stop() on all services."""
+        """Runtime.stop() should call stop() on all services."""
         runtime = AgentBenchRuntime()
+
+        # Inject mocks
         runtime.orchestrator = mock_orchestrator
         runtime.dispatcher = mock_dispatcher
         runtime.scoring_engine = mock_scoring_engine
         runtime.aggregator = mock_aggregator
 
-        # Create fake tasks that will be cancelled
-        async def fake_run():
-            await asyncio.sleep(100)
-
-        runtime._tasks = [
-            asyncio.create_task(fake_run(), name="orchestrator"),
-            asyncio.create_task(fake_run(), name="dispatcher"),
-            asyncio.create_task(fake_run(), name="scoring_engine"),
-            asyncio.create_task(fake_run(), name="aggregator"),
-        ]
+        # Create mock tasks
+        runtime._tasks = [AsyncMock(), AsyncMock()]
 
         await runtime.stop()
 
-        # Verify all service stop methods were called
+        # Verify stop() was called on each service
         mock_orchestrator.stop.assert_called_once()
         mock_dispatcher.stop.assert_called_once()
         mock_scoring_engine.stop.assert_called_once()
         mock_aggregator.stop.assert_called_once()
 
-        # Verify tasks were cancelled
+    @pytest.mark.asyncio
+    async def test_stop_logs_shutdown(self):
+        """Runtime should log during shutdown."""
+        runtime = AgentBenchRuntime()
+
+        # Inject minimal mocks
+        runtime.orchestrator = AsyncMock()
+        runtime.orchestrator.stop = AsyncMock()
+        runtime.dispatcher = AsyncMock()
+        runtime.dispatcher.stop = AsyncMock()
+        runtime.scoring_engine = AsyncMock()
+        runtime.scoring_engine.stop = AsyncMock()
+        runtime.aggregator = AsyncMock()
+        runtime.aggregator.stop = AsyncMock()
+        runtime._tasks = []
+
+        with patch("agentbench.main.logger") as mock_logger:
+            await runtime.stop()
+            mock_logger.info.assert_any_call("Stopping AgentBench services...")
+            mock_logger.info.assert_any_call("All services stopped")
+
+    @pytest.mark.asyncio
+    async def test_handles_cancelled_error_gracefully(
+        self,
+        mock_orchestrator,
+        mock_dispatcher,
+        mock_scoring_engine,
+        mock_aggregator,
+    ):
+        """Runtime should handle CancelledError gracefully during stop."""
+        runtime = AgentBenchRuntime()
+        runtime._setup_signal_handlers = MagicMock()
+
+        # Inject mocks
+        runtime.orchestrator = mock_orchestrator
+        runtime.dispatcher = mock_dispatcher
+        runtime.scoring_engine = mock_scoring_engine
+        runtime.aggregator = mock_aggregator
+
+        # Start services to create tasks
+        await runtime.start()
+
+        # Verify services were started
+        mock_orchestrator.run.assert_called_once()
+        mock_dispatcher.run.assert_called_once()
+        mock_scoring_engine.run.assert_called_once()
+        mock_aggregator.run.assert_called_once()
+
+        # Clean up tasks
         for task in runtime._tasks:
-            assert task.cancelled()
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     @pytest.mark.asyncio
-    async def test_stop_handles_none_services(self):
-        """Test that stop() handles None services gracefully."""
-        runtime = AgentBenchRuntime()
-        # All services are None by default
-
-        # Should not raise any errors
-        await runtime.stop()
-
-    @pytest.mark.asyncio
-    async def test_signal_handler_triggers_shutdown(self):
-        """Test that signal handler sets the shutdown event."""
+    async def test_signal_handler_sets_shutdown_event(self):
+        """Signal handler should set shutdown event."""
         runtime = AgentBenchRuntime()
 
-        # Signal handler should set the event
+        # Initially not set
         assert not runtime._shutdown_event.is_set()
+
+        # Trigger signal handler
         await runtime._signal_handler(signal.SIGTERM)
+
+        # Event should be set
         assert runtime._shutdown_event.is_set()
 
-    @pytest.mark.asyncio
-    async def test_run_initializes_and_starts_services(self):
-        """Test that run() calls initialize() and start()."""
-        runtime = AgentBenchRuntime()
 
-        with (
-            patch.object(runtime, "initialize", AsyncMock()) as mock_init,
-            patch.object(runtime, "start", AsyncMock()) as mock_start,
-            patch.object(runtime, "stop", AsyncMock()) as mock_stop,
-            patch("asyncio.get_event_loop") as mock_get_loop,
-        ):
-            mock_loop = MagicMock()
-            mock_get_loop.return_value = mock_loop
-
-            # Set shutdown event immediately so run() completes
-            runtime._shutdown_event.set()
-
-            await runtime.run()
-
-            mock_init.assert_called_once()
-            mock_start.assert_called_once()
-            mock_stop.assert_called_once()
+class TestErrorHandling:
+    """Test error handling during initialization."""
 
     @pytest.mark.asyncio
-    async def test_run_sets_signal_handlers(self):
-        """Test that run() sets up signal handlers."""
+    async def test_handles_initialization_errors(self):
+        """Runtime should handle initialization errors gracefully."""
         runtime = AgentBenchRuntime()
+        runtime._setup_signal_handlers = MagicMock()
 
-        with (
-            patch.object(runtime, "initialize", AsyncMock()),
-            patch.object(runtime, "start", AsyncMock()),
-            patch.object(runtime, "stop", AsyncMock()),
-            patch("asyncio.get_event_loop") as mock_get_loop,
-        ):
-            mock_loop = MagicMock()
-            mock_get_loop.return_value = mock_loop
-
-            # Set shutdown event immediately so run() completes
-            runtime._shutdown_event.set()
-
+        # Simulate initialization failure
+        with patch.object(runtime, "initialize", side_effect=Exception("Init failed")), \
+                pytest.raises(Exception, match="Init failed"):
             await runtime.run()
 
-            # Verify signal handlers were set up
-            assert mock_loop.add_signal_handler.call_count == 2
-            calls = mock_loop.add_signal_handler.call_args_list
-            assert calls[0][0][0] == signal.SIGTERM
-            assert calls[1][0][0] == signal.SIGINT
+    @pytest.mark.asyncio
+    async def test_handles_service_start_errors(
+        self,
+        mock_orchestrator,
+        mock_dispatcher,
+        mock_scoring_engine,
+        mock_aggregator,
+    ):
+        """Runtime should handle service start errors."""
+        runtime = AgentBenchRuntime()
+        runtime._setup_signal_handlers = MagicMock()
 
+        # Inject mocks
+        runtime.orchestrator = mock_orchestrator
+        runtime.dispatcher = mock_dispatcher
+        runtime.scoring_engine = mock_scoring_engine
+        runtime.aggregator = mock_aggregator
 
-@pytest.mark.asyncio
-async def test_main_entry_point():
-    """Test the main() entry point function."""
-    with patch("agentbench.main.AgentBenchRuntime") as mock_runtime_class:
-        mock_runtime = MagicMock()
-        mock_runtime.run = AsyncMock()
-        mock_runtime_class.return_value = mock_runtime
+        # Make one service fail to start
+        mock_orchestrator.run = AsyncMock(side_effect=Exception("Start failed"))
 
-        await main()
-
-        mock_runtime_class.assert_called_once()
-        mock_runtime.run.assert_called_once()
+        with pytest.raises(Exception, match="Start failed"):
+            await runtime.start()

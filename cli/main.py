@@ -3,14 +3,12 @@
 import asyncio
 import time
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from agentbench.cases.loader import load_case_set, list_enabled_cases, load_manifest
-from agentbench.cases.models import CaseSetManifest
+from agentbench.cases.loader import list_enabled_cases, load_manifest
 
 app = typer.Typer(help="AgentBench - AI Agent Evaluation Framework")
 console = Console()
@@ -20,13 +18,13 @@ console = Console()
 def run(
     workflow: str = typer.Option("wf_pr_review_v1", "--workflow", "-w", help="Workflow ID"),
     case_set: str = typer.Option("pr_review_cases_v1", "--case-set", "-c", help="Case set ID"),
-    agents: list[str] = typer.Option(
+    agents: list[str] = typer.Option(  # noqa: B008
         ["gpt-4o-mini", "claude-haiku-4-5"], "--agents", "-a", help="Agent IDs"
     ),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
-):
-    """Trigger a benchmark run."""
+    ):
     import uuid
+
     import httpx
 
     benchmark_id = str(uuid.uuid4())
@@ -51,7 +49,7 @@ def run(
         console.print(f"[bold green]Benchmark started: {result['benchmark_id']}[/]")
     except Exception as e:
         console.print(f"[bold red]Error: {e}[/]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -106,13 +104,13 @@ def report(
 
         except Exception as e:
             console.print(f"[bold red]Error: {e}[/]")
-            raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
 def list_cases(
     case_set: str = typer.Option("pr_review_cases_v1", "--case-set", "-c", help="Case set ID"),
-    fixtures_dir: Path = typer.Option(
+    fixtures_dir: Path = typer.Option(  # noqa: B008
         Path("fixtures/pr_review"), "--fixtures-dir", help="Fixtures directory"
     ),
 ):
@@ -141,24 +139,24 @@ def list_cases(
 
     except FileNotFoundError:
         console.print(f"[bold red]Case set not found: {case_set}[/]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[bold red]Error: {e}[/]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
 def seed(
     mongo_uri: str = typer.Option("mongodb://localhost:27017", "--mongo-uri", help="MongoDB URI"),
-    fixtures_dir: Path = typer.Option(
+    fixtures_dir: Path = typer.Option(  # noqa: B008
         Path("fixtures/pr_review"), "--fixtures-dir", help="Fixtures directory"
     ),
 ):
     """Seed the database with initial data."""
-    import asyncio
-    from agentbench.storage.mongo import MongoStorage
-    from agentbench.models import WorkflowDefinition
     import json
+
+    from agentbench.models import WorkflowDefinition
+    from agentbench.storage.mongo import MongoStorage
 
     async def do_seed():
         mongo = MongoStorage(mongo_uri, "agentbench")
@@ -188,7 +186,7 @@ def rescore(
     run_id: str = typer.Option(..., "--run-id", help="Run ID"),
     step: str = typer.Option(..., "--step", help="Step ID"),
     strategy: str = typer.Option(..., "--strategy", help="Scoring strategy"),
-    rubric: Optional[str] = typer.Option(None, "--rubric", help="Scoring rubric"),
+    rubric: str | None = typer.Option(None, "--rubric", help="Scoring rubric"),
 ):
     """Re-score a step with different parameters."""
     console.print(f"[bold blue]Re-scoring run {run_id}, step {step}...[/]")
@@ -214,6 +212,7 @@ def serve(
 ):
     """Start the AgentBench API server."""
     import uvicorn
+
     from agentbench.api.app import app as api_app
 
     console.print(f"[bold blue]Starting AgentBench API server on {host}:{port}...[/]")

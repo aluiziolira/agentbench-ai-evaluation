@@ -7,6 +7,7 @@ workflow definitions, evaluation runs, and reports from MongoDB.
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -193,14 +194,14 @@ class MongoStorage:
         Raises:
             WorkflowNotFoundError: If the workflow doesn't exist.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         result = await self.db.workflows.update_one(
             {"workflow_id": workflow_id, "version": version, "status": "draft"},
             {
                 "$set": {
                     "status": "published",
-                    "published_at": datetime.now(timezone.utc).isoformat(),
+                    "published_at": datetime.now(UTC).isoformat(),
                 }
             },
         )
@@ -330,7 +331,7 @@ class MongoStorage:
         Raises:
             RunNotFoundError: If the run doesn't exist.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         update_doc: dict[str, Any] = {
             "state": state.value if isinstance(state, RunState) else state
@@ -340,7 +341,7 @@ class MongoStorage:
             update_doc["current_step"] = current_step
 
         if state in (RunState.COMPLETED, RunState.FAILED, RunState.TIMED_OUT):
-            update_doc["completed_at"] = datetime.now(timezone.utc).isoformat()
+            update_doc["completed_at"] = datetime.now(UTC).isoformat()
 
         result = await self.db.runs.update_one(
             {"run_id": run_id},

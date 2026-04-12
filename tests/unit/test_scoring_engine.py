@@ -9,9 +9,8 @@ Tests cover:
 
 import json
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -86,7 +85,7 @@ def sample_run():
         agent_config={"temperature": 0},
         state=RunState.STARTED,
         current_step=0,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -116,7 +115,7 @@ def sample_workflow(sample_step):
         status="published",
         description="PR review workflow",
         steps=[sample_step],
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -230,7 +229,7 @@ class TestRawIOLoading:
             "request": {"prompt": "test"},
             "response": "test response",
             "latency_ms": 1000,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         io_file.write_text(json.dumps(io_data))
 
@@ -335,7 +334,7 @@ class TestProcessResponse:
             "request": {"prompt": "test"},
             "response": sample_agent_response,
             "latency_ms": 1000,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         io_file.write_text(json.dumps(io_data))
 
@@ -379,7 +378,7 @@ class TestProcessResponse:
         envelope = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=AGENT_RESPONSE_RECEIVED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={
                 "run_id": sample_run.run_id,
@@ -406,7 +405,7 @@ class TestProcessResponse:
         envelope = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=AGENT_RESPONSE_RECEIVED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-001",
             payload={
                 "run_id": "run-001",
@@ -428,7 +427,7 @@ class TestProcessResponse:
         envelope = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=AGENT_RESPONSE_RECEIVED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={
                 "run_id": sample_run.run_id,
@@ -445,7 +444,7 @@ class TestProcessResponse:
     async def test_process_response_missing_step(self, scoring_engine, sample_run, sample_workflow):
         """Test processing when step is not found in workflow."""
         # Create workflow with different step
-        from agentbench.models import WorkflowDefinition, StepDefinition, ScoringConfig
+        from agentbench.models import ScoringConfig, StepDefinition, WorkflowDefinition
 
         workflow = WorkflowDefinition(
             workflow_id="wf_pr_review_v1",
@@ -460,7 +459,7 @@ class TestProcessResponse:
                     scoring=ScoringConfig(strategy="finding_match"),
                 )
             ],
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
 
         scoring_engine.mongo_storage.get_run.return_value = sample_run
@@ -469,7 +468,7 @@ class TestProcessResponse:
         envelope = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=AGENT_RESPONSE_RECEIVED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={
                 "run_id": sample_run.run_id,
@@ -493,7 +492,7 @@ class TestProcessResponse:
         envelope = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=AGENT_RESPONSE_RECEIVED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={
                 "run_id": sample_run.run_id,
@@ -600,7 +599,7 @@ class TestEventEmission:
             "request": {"prompt": "test"},
             "response": sample_agent_response,
             "latency_ms": 1000,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         io_file.write_text(json.dumps(io_data))
 

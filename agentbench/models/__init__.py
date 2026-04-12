@@ -10,12 +10,12 @@ from agentbench.models.events import (
     EVALUATION_RUN_FAILED,
     EVALUATION_RUN_REQUESTED,
     EVALUATION_RUN_STARTED,
-    EventEnvelope,
     STEP_SCORED,
     VALID_EVENT_TYPES,
     WORKFLOW_COMPLETED,
     WORKFLOW_STEP_DISPATCHED,
     WORKFLOW_STEP_TIMED_OUT,
+    EventEnvelope,
 )
 from agentbench.models.results import (
     AgentSummary,

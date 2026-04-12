@@ -7,7 +7,6 @@ This module provides:
 - Payload validation for lean event payloads
 """
 
-import re
 from typing import Any
 
 # Re-export event constants from models.events
@@ -18,12 +17,12 @@ from agentbench.models.events import (
     EVALUATION_RUN_FAILED,
     EVALUATION_RUN_REQUESTED,
     EVALUATION_RUN_STARTED,
-    EventEnvelope,
     STEP_SCORED,
     VALID_EVENT_TYPES,
     WORKFLOW_COMPLETED,
     WORKFLOW_STEP_DISPATCHED,
     WORKFLOW_STEP_TIMED_OUT,
+    EventEnvelope,
 )
 
 # Stream keys as defined in spec Section 8

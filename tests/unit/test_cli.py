@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from cli.main import app

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
 
 # CRITICAL: Must import redis at module level for exception handling
 import redis.asyncio as redis_module
@@ -16,7 +17,6 @@ from agentbench.events.types import (
     validate_event_envelope,
     validate_payload,
 )
-from agentbench.models.events import VALID_EVENT_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class EventBus:
 
     def __init__(self, redis_client) -> None:
         """Initialize the event bus.
-        
+
         Args:
             redis_client: Configured Redis async client.
         """
@@ -49,8 +49,7 @@ class EventBus:
 
         validate_event_envelope(event)
 
-        if "run_id" in event.payload:
-            if event.correlation_id != event.payload["run_id"]:
+        if "run_id" in event.payload and event.correlation_id != event.payload["run_id"]:
                 raise ValueError("correlation_id must equal run_id")
 
         validate_payload(event.payload)
@@ -115,7 +114,7 @@ class EventBus:
                 if not messages:
                     continue
 
-                for stream_name, entries in messages:
+                for _stream_name, entries in messages:
                     for message_id, fields in entries:
                         try:
                             event = self._deserialize_event(fields)
@@ -147,10 +146,8 @@ class EventBus:
                                     "fields": fields,
                                 },
                             )
-                            try:
+                            with contextlib.suppress(Exception):
                                 await self._redis.xack(stream, consumer_group, message_id)
-                            except Exception:
-                                pass
 
             except redis_module.RedisError as e:
                 self._logger.error(

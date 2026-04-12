@@ -17,15 +17,14 @@ import asyncio
 import logging
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from agentbench.events.bus import EventBus
 from agentbench.events.types import STREAM_REPORTS, STREAM_SCORES
 from agentbench.models import (
+    BENCHMARK_REPORT_GENERATED,
     STEP_SCORED,
     WORKFLOW_COMPLETED,
-    BENCHMARK_REPORT_GENERATED,
     AgentSummary,
     BenchmarkReport,
     EventEnvelope,
@@ -131,7 +130,7 @@ class Aggregator:
             total_score=total_score,
             step_scores=scores,
             total_latency_ms=total_latency,
-            completed_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=datetime.now(UTC).isoformat(),
         )
 
     def _compute_benchmark_report(
@@ -201,7 +200,7 @@ class Aggregator:
             benchmark_id=benchmark_id,
             workflow_id=workflow_id,
             case_set_id=case_set_id,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             case_count=len(per_case_scores),
             agents=agents,
             per_case_scores=dict(per_case_scores),
@@ -382,7 +381,7 @@ class Aggregator:
             event_id=str(uuid.uuid4()),
             event_type=BENCHMARK_REPORT_GENERATED,
             schema_version="1.0",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=benchmark_id,
             payload={"benchmark_id": benchmark_id},
         )

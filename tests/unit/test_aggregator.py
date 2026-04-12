@@ -8,8 +8,8 @@ Tests cover:
 - Event handling
 """
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,7 +17,6 @@ from agentbench.aggregator import Aggregator
 from agentbench.models import (
     STEP_SCORED,
     WORKFLOW_COMPLETED,
-    AgentSummary,
     BenchmarkReport,
     EventEnvelope,
     RunReport,
@@ -77,7 +76,7 @@ class TestScoreAccumulation:
         envelope = EventEnvelope(
             event_id="evt-1",
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -110,7 +109,7 @@ class TestScoreAccumulation:
             envelope = EventEnvelope(
                 event_id=f"evt-{i}",
                 event_type=STEP_SCORED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id="run-1",
                 payload={
                     "run_id": "run-1",
@@ -139,7 +138,7 @@ class TestScoreAccumulation:
             envelope = EventEnvelope(
                 event_id=f"evt-{run_id}",
                 event_type=STEP_SCORED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=run_id,
                 payload={
                     "run_id": run_id,
@@ -218,7 +217,7 @@ class TestRunReportGeneration:
         score_envelope = EventEnvelope(
             event_id="evt-1",
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -246,7 +245,7 @@ class TestRunReportGeneration:
             agent_config={"model": "gpt-4o-mini"},
             state=RunState.COMPLETED,
             current_step=1,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         mock_mongo_storage.get_run.return_value = mock_run
 
@@ -254,7 +253,7 @@ class TestRunReportGeneration:
         workflow_envelope = EventEnvelope(
             event_id="evt-2",
             event_type=WORKFLOW_COMPLETED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -279,7 +278,7 @@ class TestRunReportGeneration:
         workflow_envelope = EventEnvelope(
             event_id="evt-1",
             event_type=WORKFLOW_COMPLETED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -304,7 +303,7 @@ class TestRunReportGeneration:
         score_envelope = EventEnvelope(
             event_id="evt-1",
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -327,7 +326,7 @@ class TestRunReportGeneration:
         workflow_envelope = EventEnvelope(
             event_id="evt-2",
             event_type=WORKFLOW_COMPLETED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -381,7 +380,7 @@ class TestBenchmarkReportGeneration:
                     ),
                 ],
                 total_latency_ms=600,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
             RunReport(
                 run_id="run-2",
@@ -414,7 +413,7 @@ class TestBenchmarkReportGeneration:
                     ),
                 ],
                 total_latency_ms=750,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
         ]
 
@@ -454,7 +453,7 @@ class TestBenchmarkReportGeneration:
                 total_score=2.0,
                 step_scores=[],
                 total_latency_ms=500,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
             # Agent 1, Case 2
             RunReport(
@@ -467,7 +466,7 @@ class TestBenchmarkReportGeneration:
                 total_score=1.8,
                 step_scores=[],
                 total_latency_ms=450,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
             # Agent 2, Case 1
             RunReport(
@@ -480,7 +479,7 @@ class TestBenchmarkReportGeneration:
                 total_score=1.9,
                 step_scores=[],
                 total_latency_ms=550,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
             # Agent 2, Case 2
             RunReport(
@@ -493,7 +492,7 @@ class TestBenchmarkReportGeneration:
                 total_score=2.1,
                 step_scores=[],
                 total_latency_ms=600,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
         ]
 
@@ -535,7 +534,7 @@ class TestBenchmarkReportGeneration:
                 total_score=2.0,
                 step_scores=[],
                 total_latency_ms=500,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
             RunReport(
                 run_id="run-2",
@@ -547,7 +546,7 @@ class TestBenchmarkReportGeneration:
                 total_score=1.8,
                 step_scores=[],
                 total_latency_ms=550,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
         ]
         mock_mongo_storage.get_run_report.side_effect = lambda run_id: next(
@@ -566,7 +565,7 @@ class TestBenchmarkReportGeneration:
             agent_config={},
             state=RunState.COMPLETED,
             current_step=1,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         mock_mongo_storage.get_run.return_value = mock_run
 
@@ -643,7 +642,7 @@ class TestAggregatorLifecycle:
         score_event = EventEnvelope(
             event_id="evt-1",
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="run-1",
             payload={
                 "run_id": "run-1",
@@ -761,7 +760,7 @@ class TestStepBreakdown:
                     ),
                 ],
                 total_latency_ms=600,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
             # Another run for same agent, same case (different case)
             RunReport(
@@ -795,7 +794,7 @@ class TestStepBreakdown:
                     ),
                 ],
                 total_latency_ms=670,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             ),
         ]
 

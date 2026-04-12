@@ -10,15 +10,12 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentbench.cases.models import ReviewCaseDefinition
 from agentbench.events.types import (
-    EVALUATION_RUN_COMPLETED,
     EVALUATION_RUN_FAILED,
     EVALUATION_RUN_REQUESTED,
     EVALUATION_RUN_STARTED,
@@ -154,8 +151,8 @@ def sample_workflow():
             ),
         ],
         scoring_aggregation="weighted_average",
-        created_at=datetime.now(timezone.utc).isoformat(),
-        published_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
+        published_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -173,7 +170,7 @@ def sample_run():
         agent_config={"temperature": 0.0},
         state=RunState.STARTED,
         current_step=0,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
         completed_at=None,
     )
 
@@ -319,7 +316,7 @@ class TestStepProgression:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "s1_findings"},
         )
@@ -341,7 +338,7 @@ class TestStepProgression:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="missing-run-id",
             payload={"run_id": "missing-run-id", "step_id": "s1"},
         )
@@ -362,7 +359,7 @@ class TestStepProgression:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "s1_findings"},
         )
@@ -438,7 +435,7 @@ class TestBenchmarkExpansion:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=EVALUATION_RUN_REQUESTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="benchmark-001",
             payload={
                 "benchmark_id": "benchmark-001",
@@ -464,7 +461,7 @@ class TestBenchmarkExpansion:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=EVALUATION_RUN_REQUESTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="benchmark-001",
             payload={
                 "benchmark_id": "benchmark-001",
@@ -489,7 +486,7 @@ class TestBenchmarkExpansion:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=EVALUATION_RUN_REQUESTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="benchmark-001",
             payload={
                 "benchmark_id": "benchmark-001",
@@ -562,7 +559,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=EVALUATION_RUN_REQUESTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="benchmark-001",
             payload={
                 "benchmark_id": "benchmark-001",
@@ -602,7 +599,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=STEP_SCORED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "s1_findings"},
         )
@@ -627,7 +624,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=EVALUATION_RUN_REQUESTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="benchmark-001",
             payload={
                 "benchmark_id": "benchmark-001",

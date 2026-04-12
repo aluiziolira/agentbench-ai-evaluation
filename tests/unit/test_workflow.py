@@ -4,13 +4,10 @@ Validates that workflow JSON files conform to the WorkflowDefinition model.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-import pytest
-
-from agentbench.models import WorkflowDefinition, StepDefinition, ScoringConfig
-
+from agentbench.models import WorkflowDefinition
 
 WORKFLOWS_DIR = Path(__file__).parent.parent.parent / "workflows"
 
@@ -27,7 +24,7 @@ class TestWorkflowValidation:
         """Test that wf_pr_review_v1.json validates against WorkflowDefinition."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         # Should validate without raising
@@ -43,7 +40,7 @@ class TestWorkflowValidation:
         """Test that workflow has exactly two steps as per spec."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -54,7 +51,7 @@ class TestWorkflowValidation:
         """Test that steps are in correct order."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -67,7 +64,7 @@ class TestWorkflowValidation:
         """Test that step IDs match the spec requirements."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -80,7 +77,7 @@ class TestWorkflowValidation:
         """Test that step 1 (s1_findings) is configured correctly per spec."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -101,7 +98,7 @@ class TestWorkflowValidation:
         """Test that step 2 (s2_review_summary) is configured correctly per spec."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -123,7 +120,7 @@ class TestWorkflowValidation:
         """Test that created_at and published_at are valid ISO-8601 timestamps."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -140,7 +137,7 @@ class TestWorkflowValidation:
         """Test that workflow can be serialized and deserialized."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             original_data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(original_data)
@@ -158,7 +155,7 @@ class TestWorkflowValidation:
         """Test that step 1 prompt matches the spec template."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)
@@ -179,7 +176,7 @@ class TestWorkflowValidation:
         """Test that step 2 prompt matches the spec template."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
-        with open(workflow_path, "r") as f:
+        with open(workflow_path) as f:
             data = json.load(f)
 
         workflow = WorkflowDefinition.model_validate(data)

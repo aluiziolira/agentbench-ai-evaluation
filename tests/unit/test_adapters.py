@@ -6,7 +6,7 @@ and error handling.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,7 +27,7 @@ def generate_uuid() -> str:
 
 def now_iso() -> str:
     """Get current UTC time as ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def create_test_step(prompt: str = "Test prompt") -> StepDefinition:
@@ -282,7 +282,6 @@ class TestOpenAIAdapter:
 
     def test_adapter_implements_protocol(self) -> None:
         """Test that OpenAIAdapter implements AgentAdapter protocol."""
-        from typing import runtime_checkable
 
         adapter = OpenAIAdapter(model="gpt-4o-mini", api_key="test-key")
 
@@ -513,7 +512,6 @@ class TestAnthropicAdapter:
 
     def test_adapter_implements_protocol(self) -> None:
         """Test that AnthropicAdapter implements AgentAdapter protocol."""
-        from typing import runtime_checkable
 
         adapter = AnthropicAdapter(model="claude-haiku-4-5-20251001", api_key="test-key")
 

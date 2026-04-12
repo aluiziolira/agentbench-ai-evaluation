@@ -5,7 +5,7 @@ and report persistence with mocked MongoDB using mongomock.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pymongo.errors import DuplicateKeyError
@@ -47,7 +47,7 @@ def generate_uuid() -> str:
 
 def now_iso() -> str:
     """Get current UTC time as ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def create_test_workflow(

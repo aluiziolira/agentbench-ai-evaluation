@@ -189,7 +189,7 @@ class AnthropicAdapter:
                 self._make_api_call(messages),
                 timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise TimeoutError(f"Anthropic request timed out after {timeout_seconds}s") from e
 
     async def _make_api_call(self, messages: list[dict[str, Any]]) -> Any:

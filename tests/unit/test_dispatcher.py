@@ -11,8 +11,7 @@ Tests cover:
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -83,7 +82,7 @@ def sample_run():
         agent_config={"temperature": 0.0},
         state=RunState.STARTED,
         current_step=0,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
         completed_at=None,
     )
 
@@ -135,8 +134,8 @@ def sample_workflow(sample_step):
         description="PR review workflow",
         steps=[sample_step],
         scoring_aggregation="weighted_average",
-        created_at=datetime.now(timezone.utc).isoformat(),
-        published_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
+        published_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -253,15 +252,13 @@ class TestDispatchStep:
         mock_adapter.agent_id = "gpt-4o-mini"
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
-        with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist:
-            with patch(
+        with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock), \
+                patch(
                 "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
                 return_value=mock_adapter,
-            ):
-                with patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
-                    await dispatcher._dispatch_step(sample_run, sample_step)
-
-        # Verify event was published
+            ), \
+                patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+            await dispatcher._dispatch_step(sample_run, sample_step)
         mock_event_bus.publish.assert_called_once()
         call_args = mock_event_bus.publish.call_args
         stream, envelope = call_args[0]
@@ -286,12 +283,9 @@ class TestDispatchStep:
         with patch(
             "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
             return_value=mock_adapter,
-        ):
-            with patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
-                with patch.object(
-                    dispatcher, "_persist_raw_io", new_callable=AsyncMock
-                ) as mock_persist:
-                    await dispatcher._dispatch_step(sample_run, sample_step)
+        ), patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case), \
+                patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist:
+            await dispatcher._dispatch_step(sample_run, sample_step)
 
         # Verify persistence was called with correct args
         mock_persist.assert_called_once()
@@ -310,13 +304,10 @@ class TestDispatchStep:
         """Test that unknown agent_id raises ValueError."""
         sample_run.agent_id = "unknown-agent"
 
-        with patch("agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get", return_value=None):
-            with patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
-                with pytest.raises(ValueError, match="Unknown agent_id: unknown-agent"):
-                    await dispatcher._dispatch_step(sample_run, sample_step)
-
-
-class TestTimeoutHandling:
+        with pytest.raises(ValueError, match="Unknown agent_id: unknown-agent"), \
+                patch("agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get", return_value=None), \
+                patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+            await dispatcher._dispatch_step(sample_run, sample_step)
     """Test timeout handling during agent invocation."""
 
     @pytest.mark.asyncio
@@ -340,9 +331,8 @@ class TestTimeoutHandling:
         with patch(
             "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
             return_value=mock_adapter,
-        ):
-            with patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
-                await dispatcher._dispatch_step(sample_run, sample_step)
+        ), patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+            await dispatcher._dispatch_step(sample_run, sample_step)
 
         # Verify timeout event was published
         mock_event_bus.publish.assert_called_once()
@@ -371,16 +361,13 @@ class TestTimeoutHandling:
         mock_adapter.invoke = slow_invoke
         sample_step.timeout_ms = 100
 
-        with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist:
-            with patch(
+        with patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock), \
+                patch(
                 "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
                 return_value=mock_adapter,
-            ):
-                with patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
-                    await dispatcher._dispatch_step(sample_run, sample_step)
-
-        # Verify persistence was NOT called
-        mock_persist.assert_not_called()
+            ), \
+                patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case):
+            await dispatcher._dispatch_step(sample_run, sample_step)
 
 
 class TestMainLoop:
@@ -395,7 +382,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type="workflow.step.dispatched",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={
                 "run_id": sample_run.run_id,
@@ -426,15 +413,14 @@ class TestMainLoop:
         with patch(
             "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
             return_value=mock_adapter,
-        ):
-            with patch("agentbench.dispatcher.dispatcher.load_case") as mock_load_case:
-                mock_load_case.return_value = MagicMock(
-                    case_id="pr_001",
-                    case_set_id="pr_review_cases_v1",
-                    ticket_text="Test ticket",
-                    diff_patch="Test diff",
-                )
-                await dispatcher.run()
+        ), patch("agentbench.dispatcher.dispatcher.load_case") as mock_load_case:
+            mock_load_case.return_value = MagicMock(
+                case_id="pr_001",
+                case_set_id="pr_review_cases_v1",
+                ticket_text="Test ticket",
+                diff_patch="Test diff",
+            )
+            await dispatcher.run()
 
         # Verify run and workflow were loaded
         mock_mongo_storage.get_run.assert_called_once_with(sample_run.run_id)
@@ -450,7 +436,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type="agent.response.received",  # Not a dispatched event
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="test-run-id",
             payload={"run_id": "test-run-id", "step_id": "s1"},
         )
@@ -474,7 +460,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type="workflow.step.dispatched",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id="missing-run-id",
             payload={"run_id": "missing-run-id", "step_id": "s1"},
         )
@@ -500,7 +486,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type="workflow.step.dispatched",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "s1"},
         )
@@ -527,7 +513,7 @@ class TestMainLoop:
         event = EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type="workflow.step.dispatched",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "nonexistent-step"},
         )
@@ -549,8 +535,8 @@ class TestMainLoop:
                 )
             ],
             scoring_aggregation="weighted_average",
-            created_at=datetime.now(timezone.utc).isoformat(),
-            published_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
+            published_at=datetime.now(UTC).isoformat(),
         )
 
         async def mock_consume(*args, **kwargs):

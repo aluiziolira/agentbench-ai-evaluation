@@ -17,7 +17,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from agentbench.cases.loader import load_case
@@ -127,7 +127,7 @@ class StepDispatcher:
             "request": request,
             "response": response,
             "latency_ms": latency_ms,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         io_file = run_dir / f"{step.step_id}.json"
@@ -210,7 +210,6 @@ class StepDispatcher:
 
         # Invoke with timeout using asyncio.wait_for
         timeout_seconds = step.timeout_ms / 1000.0
-        start_time = datetime.now(timezone.utc)
 
         logger.info(f"[DISPATCHER] Invoking adapter with timeout={timeout_seconds}s")
 
@@ -236,7 +235,7 @@ class StepDispatcher:
             event = EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=AGENT_RESPONSE_RECEIVED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=run.run_id,
                 payload={
                     "run_id": run.run_id,
@@ -255,7 +254,7 @@ class StepDispatcher:
                 },
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 f"[DISPATCHER] Step {step.step_id} timed out for run {run.run_id} after {timeout_seconds}s",
                 extra={
@@ -269,7 +268,7 @@ class StepDispatcher:
             event = EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=WORKFLOW_STEP_TIMED_OUT,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=run.run_id,
                 payload={
                     "run_id": run.run_id,

@@ -1,6 +1,6 @@
 """Benchmark API endpoints."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -46,7 +46,7 @@ async def create_benchmark(
         EventEnvelope(
             event_id=str(uuid.uuid4()),
             event_type=EVALUATION_RUN_REQUESTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             correlation_id=benchmark_id,
             payload={
                 "benchmark_id": benchmark_id,

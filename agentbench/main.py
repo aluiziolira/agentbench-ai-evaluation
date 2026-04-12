@@ -4,6 +4,7 @@ Wires all services together in a single async process.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import signal
@@ -181,10 +182,8 @@ class AgentBenchRuntime:
         # Cancel tasks
         for task in self._tasks:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         logger.info("All services stopped")
 
@@ -196,7 +195,7 @@ class AgentBenchRuntime:
         try:
             await self.initialize()
             await self.start()
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to initialize or start services")
             # Ensure logs are flushed before exit
             logging.shutdown()

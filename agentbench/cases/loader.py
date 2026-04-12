@@ -45,11 +45,11 @@ def load_manifest(manifest_path: Path) -> CaseSetManifest:
         raise FileNotFoundError(f"Manifest path is not a file: {manifest_path}")
 
     try:
-        with open(manifest_path, "r", encoding="utf-8") as f:
+        with open(manifest_path, encoding="utf-8") as f:
             raw_data = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(f"Malformed JSON in manifest file {manifest_path}: {e}") from e
-    except IOError as e:
+    except OSError as e:
         raise ValueError(f"Failed to read manifest file {manifest_path}: {e}") from e
 
     try:
@@ -121,7 +121,7 @@ def load_case(case_id: str, fixtures_dir: Path) -> ReviewCaseDefinition:
         raise FileNotFoundError(f"Ticket file not found: {ticket_path}")
     try:
         ticket_text = ticket_path.read_text(encoding="utf-8")
-    except IOError as e:
+    except OSError as e:
         raise ValueError(f"Failed to read ticket file {ticket_path}: {e}") from e
 
     # Read diff.patch
@@ -129,18 +129,18 @@ def load_case(case_id: str, fixtures_dir: Path) -> ReviewCaseDefinition:
         raise FileNotFoundError(f"Diff file not found: {diff_path}")
     try:
         diff_patch = diff_path.read_text(encoding="utf-8")
-    except IOError as e:
+    except OSError as e:
         raise ValueError(f"Failed to read diff file {diff_path}: {e}") from e
 
     # Read and parse ground_truth.json
     if not ground_truth_path.exists():
         raise FileNotFoundError(f"Ground truth file not found: {ground_truth_path}")
     try:
-        with open(ground_truth_path, "r", encoding="utf-8") as f:
+        with open(ground_truth_path, encoding="utf-8") as f:
             ground_truth_data = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(f"Malformed JSON in ground truth file {ground_truth_path}: {e}") from e
-    except IOError as e:
+    except OSError as e:
         raise ValueError(f"Failed to read ground truth file {ground_truth_path}: {e}") from e
 
     # Parse expected_findings
@@ -165,11 +165,11 @@ def load_case(case_id: str, fixtures_dir: Path) -> ReviewCaseDefinition:
     if not metadata_path.exists():
         raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
     try:
-        with open(metadata_path, "r", encoding="utf-8") as f:
+        with open(metadata_path, encoding="utf-8") as f:
             metadata = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(f"Malformed JSON in metadata file {metadata_path}: {e}") from e
-    except IOError as e:
+    except OSError as e:
         raise ValueError(f"Failed to read metadata file {metadata_path}: {e}") from e
 
     # Extract case_set_id from metadata or infer from fixtures_dir

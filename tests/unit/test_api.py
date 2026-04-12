@@ -10,7 +10,7 @@ Tests cover:
 - Publish workflow
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,9 +21,9 @@ from agentbench.models import (
     AgentSummary,
     BenchmarkReport,
     RunState,
-    WorkflowDefinition,
-    StepDefinition,
     ScoringConfig,
+    StepDefinition,
+    WorkflowDefinition,
 )
 from agentbench.models.run import EvaluationRun
 
@@ -62,9 +62,9 @@ def mock_event_bus():
 def test_client(mock_mongo_storage, mock_redis_storage, mock_event_bus):
     """Create a test client with mocked dependencies."""
     # Patch the lifespan to inject mock dependencies
-    with patch("agentbench.api.app.MongoStorage") as mock_mongo_cls:
-        with patch("agentbench.api.app.RedisStorage") as mock_redis_cls:
-            with patch("agentbench.api.app.EventBus") as mock_bus_cls:
+    with patch("agentbench.api.app.MongoStorage") as mock_mongo_cls, \
+            patch("agentbench.api.app.RedisStorage") as mock_redis_cls, \
+            patch("agentbench.api.app.EventBus") as mock_bus_cls:
                 mock_mongo_cls.return_value = mock_mongo_storage
                 mock_redis_cls.return_value = mock_redis_storage
                 mock_bus_cls.return_value = mock_event_bus
@@ -107,7 +107,7 @@ class TestCreateBenchmark:
                     scoring=ScoringConfig(strategy="finding_match"),
                 )
             ],
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         mock_mongo_storage.get_workflow.return_value = workflow
 
@@ -185,7 +185,7 @@ class TestGetBenchmark:
             benchmark_id="bench-123",
             workflow_id="wf_pr_review_v1",
             case_set_id="pr_review_cases_v1",
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             case_count=2,
             agents=[
                 AgentSummary(
@@ -243,7 +243,7 @@ class TestListBenchmarkRuns:
                 agent_config={},
                 state=RunState.COMPLETED,
                 current_step=1,
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
             ),
             EvaluationRun(
                 run_id="run-2",
@@ -256,7 +256,7 @@ class TestListBenchmarkRuns:
                 agent_config={},
                 state=RunState.STARTED,
                 current_step=0,
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
             ),
         ]
         mock_mongo_storage.list_runs.return_value = runs
@@ -297,7 +297,7 @@ class TestRegisterWorkflow:
                     "scoring": {"strategy": "finding_match", "weight": 2.0},
                 }
             ],
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         # Act
@@ -322,7 +322,7 @@ class TestRegisterWorkflow:
             "status": "draft",
             "description": "Test workflow",
             "steps": [],
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         # Act
@@ -352,8 +352,8 @@ class TestGetWorkflow:
                     scoring=ScoringConfig(strategy="finding_match"),
                 )
             ],
-            created_at=datetime.now(timezone.utc).isoformat(),
-            published_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
+            published_at=datetime.now(UTC).isoformat(),
         )
         mock_mongo_storage.get_workflow.return_value = workflow
 

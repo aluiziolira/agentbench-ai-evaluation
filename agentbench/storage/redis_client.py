@@ -1,7 +1,6 @@
 """Redis storage layer for AgentBench FSM and tracking."""
 
 import logging
-from typing import Any
 
 import redis.asyncio as redis
 
@@ -103,5 +102,5 @@ class RedisStorage:
         client = await self._get_client()
         data = await client.hgetall(key)
         if data:
-            return {k: v for k, v in data.items()}
+            return dict(data)
         return None

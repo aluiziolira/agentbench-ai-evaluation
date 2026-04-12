@@ -6,7 +6,6 @@ findings, parse failures, line range tolerances, and severity mismatches.
 """
 
 import json
-import logging
 from typing import Any
 
 import pytest
@@ -1229,7 +1228,7 @@ class TestScoringNormalization:
         self, strategy: FindingMatchStrategy, base_step: StepDefinition
     ) -> None:
         """Raw score should be floored at minimum of 0.0."""
-        case = ReviewCaseDefinition(
+        ReviewCaseDefinition(
             case_id="pr_021",
             case_set_id="pr_review_cases_v1",
             difficulty="medium",

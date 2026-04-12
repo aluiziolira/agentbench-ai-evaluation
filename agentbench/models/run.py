@@ -1,10 +1,11 @@
 """Run models."""
 
+from enum import StrEnum
+
 from pydantic import BaseModel
-from enum import Enum
 
 
-class RunState(str, Enum):
+class RunState(StrEnum):
     PENDING = "PENDING"
     STARTED = "STARTED"
     STEP_IN_PROGRESS = "STEP_IN_PROGRESS"

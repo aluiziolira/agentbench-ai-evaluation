@@ -8,7 +8,7 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -20,7 +20,6 @@ from agentbench.events import (
     EVALUATION_RUN_FAILED,
     EVALUATION_RUN_REQUESTED,
     EVALUATION_RUN_STARTED,
-    EventEnvelope,
     FORBIDDEN_PAYLOAD_PATTERNS,
     MAX_PAYLOAD_SIZE,
     STEP_SCORED,
@@ -33,6 +32,7 @@ from agentbench.events import (
     WORKFLOW_COMPLETED,
     WORKFLOW_STEP_DISPATCHED,
     WORKFLOW_STEP_TIMED_OUT,
+    EventEnvelope,
     get_event_types_for_stream,
     get_stream_for_event,
     is_eval_run_event,
@@ -49,7 +49,7 @@ def generate_uuid() -> str:
 
 def now_iso() -> str:
     """Get current UTC time as ISO-8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class TestStreamKeys:

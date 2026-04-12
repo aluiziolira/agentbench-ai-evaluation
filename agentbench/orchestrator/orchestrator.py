@@ -22,7 +22,7 @@ Behavior:
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -116,7 +116,7 @@ class Orchestrator:
             agent_id=agent_id,
             agent_config={"temperature": 0},
             state=RunState.PENDING,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         await self.mongo_storage.create_run(run)
         await self.redis_storage.add_run_to_benchmark(benchmark_id, run.run_id)
@@ -162,7 +162,7 @@ class Orchestrator:
             EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=WORKFLOW_STEP_DISPATCHED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=run.run_id,
                 payload={
                     "run_id": run.run_id,
@@ -253,7 +253,7 @@ class Orchestrator:
                     EventEnvelope(
                         event_id=str(uuid.uuid4()),
                         event_type=EVALUATION_RUN_STARTED,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        timestamp=datetime.now(UTC).isoformat(),
                         correlation_id=run.run_id,
                         payload={
                             "run_id": run.run_id,
@@ -273,7 +273,7 @@ class Orchestrator:
             EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=EVALUATION_RUN_STARTED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=benchmark_id,
                 payload={
                     "benchmark_id": benchmark_id,
@@ -351,7 +351,7 @@ class Orchestrator:
             EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=WORKFLOW_COMPLETED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=run.run_id,
                 payload={
                     "run_id": run.run_id,
@@ -368,7 +368,7 @@ class Orchestrator:
                 EventEnvelope(
                     event_id=str(uuid.uuid4()),
                     event_type=EVALUATION_RUN_COMPLETED,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=datetime.now(UTC).isoformat(),
                     correlation_id=run.benchmark_id,
                     payload={
                         "benchmark_id": run.benchmark_id,
@@ -409,7 +409,7 @@ class Orchestrator:
             EventEnvelope(
                 event_id=str(uuid.uuid4()),
                 event_type=EVALUATION_RUN_FAILED,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 correlation_id=run_id,
                 payload={
                     "run_id": run_id,
