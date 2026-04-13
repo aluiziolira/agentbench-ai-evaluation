@@ -2,11 +2,10 @@
 
 ⚠️  MANUAL-ONLY: These tests make REAL API calls to OpenAI and Anthropic.
    They cost money (~$0.50-1.00 per run) and are NEVER run in CI.
-
    To run locally:
-   1. Ensure services are running: just start && just runtime && just api
+   1. Start all services: just init && just services-bg
    2. Set AGENTBENCH_INTEGRATION_TEST=1
-   3. Run: uv run pytest tests/integration/test_pipeline.py -v
+   3. Run: just test-integration
 
 This test runs the complete benchmark workflow end-to-end using
 real API keys. It validates:
