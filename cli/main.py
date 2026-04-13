@@ -1,6 +1,8 @@
 """AgentBench CLI - Operator interface for benchmark management."""
 
 import asyncio
+import json
+import os
 import time
 from pathlib import Path
 
@@ -147,14 +149,13 @@ def list_cases(
 
 @app.command()
 def seed(
-    mongo_uri: str = typer.Option("mongodb://localhost:27017", "--mongo-uri", help="MongoDB URI"),
+    mongo_uri: str = typer.Option(
+        os.getenv("MONGODB_URI", "mongodb://localhost:27017"), "--mongo-uri", help="MongoDB URI"
+    ),
     fixtures_dir: Path = typer.Option(  # noqa: B008
         Path("fixtures/pr_review"), "--fixtures-dir", help="Fixtures directory"
     ),
 ) -> None:
-    """Seed the database with initial data."""
-    import json
-
     from agentbench.models import WorkflowDefinition
     from agentbench.storage.mongo import MongoStorage
 
