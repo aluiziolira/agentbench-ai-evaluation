@@ -4,7 +4,7 @@ A minimal AI agent evaluation framework for PR review behavior, built with event
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml/badge.svg)](https://github.com/agentbench/agentbench/actions/workflows/ci.yml)
+[![CI](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml/badge.svg)](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml)
 
 ## Project Title
 
