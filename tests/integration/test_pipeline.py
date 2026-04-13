@@ -41,9 +41,7 @@ pytestmark = pytest.mark.skipif(
 def _seed_database() -> None:
     """Seed database and assert success."""
     # Build seed command with auth URI from environment
-    mongo_uri = os.environ.get(
-        "MONGODB_URI", "mongodb://localhost:27017"
-    )
+    mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
     result = subprocess.run(
         ["agentbench", "seed", "--mongo-uri", mongo_uri],
         capture_output=True,
@@ -68,7 +66,6 @@ def require_api_keys():
 
     if not openai_key or not anthropic_key:
         pytest.skip("API keys not configured. Set OPENAI_API_KEY and ANTHROPIC_API_KEY.")
-
 
 
 @pytest.mark.integration
@@ -145,7 +142,6 @@ async def test_full_benchmark_pipeline(api_client, require_api_keys):
         assert "p50_latency_ms" in agent
         assert "p95_latency_ms" in agent
         assert "failure_rate" in agent
-
 
 
 @pytest.mark.integration
