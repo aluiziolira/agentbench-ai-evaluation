@@ -76,6 +76,8 @@ jobs:
 
       - name: Seed database
         run: just seed
+      - name: Prepare log directory
+        run: mkdir -p /tmp/agentbench
 
       - name: Start runtime (background)
         run: |
