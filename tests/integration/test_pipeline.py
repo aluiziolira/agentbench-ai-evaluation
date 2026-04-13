@@ -18,16 +18,39 @@ real API keys. It validates:
 
 import asyncio
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import httpx
 import pytest
+from dotenv import load_dotenv
+
+# Load .env from project root so API keys are available
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+RAW_IO_DIR = PROJECT_ROOT / "data" / "raw_io"
 
 # Skip all integration tests unless explicitly enabled
 pytestmark = pytest.mark.skipif(
     os.environ.get("AGENTBENCH_INTEGRATION_TEST") != "1",
     reason="Integration tests disabled. Set AGENTBENCH_INTEGRATION_TEST=1 to enable.",
 )
+
+
+def _seed_database() -> None:
+    """Seed database and assert success."""
+    # Build seed command with auth URI from environment
+    mongo_uri = os.environ.get(
+        "MONGODB_URI", "mongodb://localhost:27017"
+    )
+    result = subprocess.run(
+        ["agentbench", "seed", "--mongo-uri", mongo_uri],
+        capture_output=True,
+        text=True,
+        cwd=str(PROJECT_ROOT),
+    )
+    assert result.returncode == 0, f"Seed failed: {result.stderr}"
 
 
 @pytest.fixture
@@ -47,6 +70,7 @@ def require_api_keys():
         pytest.skip("API keys not configured. Set OPENAI_API_KEY and ANTHROPIC_API_KEY.")
 
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_full_benchmark_pipeline(api_client, require_api_keys):
@@ -60,16 +84,11 @@ async def test_full_benchmark_pipeline(api_client, require_api_keys):
     4. Verifies raw I/O files exist
     5. Verifies benchmark report is generated
     """
-    # First seed the database
-    import subprocess
+    _seed_database()
 
-    result = subprocess.run(
-        ["agentbench", "seed"],
-        capture_output=True,
-        text=True,
-        cwd=str(Path(__file__).parent.parent.parent),
-    )
-    assert result.returncode == 0, f"Seed failed: {result.stderr}"
+    # Clean raw I/O from previous runs for accurate count
+    if RAW_IO_DIR.exists():
+        shutil.rmtree(RAW_IO_DIR)
 
     # Create a benchmark
     response = await api_client.post(
@@ -111,15 +130,13 @@ async def test_full_benchmark_pipeline(api_client, require_api_keys):
     case_count = len(report["per_case_scores"])
     assert case_count > 0
 
-    # Verify raw I/O files were written
-    raw_io_dir = Path("data/raw_io")
-    if raw_io_dir.exists():
-        run_dirs = list(raw_io_dir.iterdir())
-        # Should have 2 agents * case_count runs
-        expected_runs = 2 * case_count
-        assert len(run_dirs) == expected_runs, (
-            f"Expected {expected_runs} run directories, found {len(run_dirs)}"
-        )
+    # Verify raw I/O files were written (MUST exist, not silently skipped)
+    assert RAW_IO_DIR.exists(), f"Raw I/O directory not found: {RAW_IO_DIR}"
+    run_dirs = [d for d in RAW_IO_DIR.iterdir() if d.is_dir()]
+    expected_runs = 2 * case_count
+    assert len(run_dirs) == expected_runs, (
+        f"Expected {expected_runs} run directories, found {len(run_dirs)}"
+    )
 
     # Verify agent summaries have expected fields
     for agent in report["agents"]:
@@ -130,14 +147,12 @@ async def test_full_benchmark_pipeline(api_client, require_api_keys):
         assert "failure_rate" in agent
 
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_benchmark_with_single_agent(api_client, require_api_keys):
     """Test benchmark with just one agent for faster validation."""
-    # Seed database
-    import subprocess
-
-    subprocess.run(["agentbench", "seed"], capture_output=True)
+    _seed_database()
 
     # Create benchmark with single agent
     response = await api_client.post(
@@ -154,11 +169,12 @@ async def test_benchmark_with_single_agent(api_client, require_api_keys):
     benchmark_id = response.json()["benchmark_id"]
 
     # Poll for completion
-    max_wait = 180
+    max_wait = 300
     elapsed = 0
 
     while elapsed < max_wait:
         response = await api_client.get(f"/benchmarks/{benchmark_id}")
+        assert response.status_code == 200
         data = response.json()
 
         if data.get("status") != "in_progress":
@@ -177,9 +193,7 @@ async def test_benchmark_with_single_agent(api_client, require_api_keys):
 @pytest.mark.asyncio
 async def test_list_benchmark_runs(api_client, require_api_keys):
     """Test listing runs for a benchmark."""
-    import subprocess
-
-    subprocess.run(["agentbench", "seed"], capture_output=True)
+    _seed_database()
 
     # Create benchmark
     response = await api_client.post(
@@ -189,8 +203,27 @@ async def test_list_benchmark_runs(api_client, require_api_keys):
             "case_set_id": "pr_review_cases_v1",
             "agents": ["gpt-4o-mini"],
         },
+        timeout=30.0,
     )
+    assert response.status_code == 200
     benchmark_id = response.json()["benchmark_id"]
+
+    # Poll until benchmark completes (runs are created asynchronously)
+    max_wait = 300
+    elapsed = 0
+
+    while elapsed < max_wait:
+        poll_resp = await api_client.get(f"/benchmarks/{benchmark_id}")
+        assert poll_resp.status_code == 200
+        data = poll_resp.json()
+
+        if data.get("status") != "in_progress":
+            break
+
+        await asyncio.sleep(5)
+        elapsed += 5
+    else:
+        pytest.fail("Benchmark did not complete within timeout")
 
     # List runs
     response = await api_client.get(f"/benchmarks/{benchmark_id}/runs")
@@ -198,6 +231,7 @@ async def test_list_benchmark_runs(api_client, require_api_keys):
 
     runs = response.json()
     assert isinstance(runs, list)
+    assert len(runs) > 0, "Expected at least one run after benchmark completion"
 
     # Each run should have required fields
     for run in runs:
