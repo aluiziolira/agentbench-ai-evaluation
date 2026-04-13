@@ -200,6 +200,7 @@ class TestGetBenchmark:
                 )
             ],
             per_case_scores={"case-1": {"gpt-4o-mini": 0.85}},
+            per_case_topics={"case-1": "Auth/Security"},
         )
         mock_mongo_storage.get_benchmark_report.return_value = report
 
@@ -212,6 +213,7 @@ class TestGetBenchmark:
         assert data["benchmark_id"] == "bench-123"
         assert data["case_count"] == 2
         assert len(data["agents"]) == 1
+        assert data["per_case_topics"] == {"case-1": "Auth/Security"}
 
     def test_get_benchmark_not_found(self, test_client, mock_redis_storage, mock_mongo_storage):
         """Test getting non-existent benchmark."""

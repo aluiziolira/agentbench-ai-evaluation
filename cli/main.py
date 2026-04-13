@@ -11,6 +11,14 @@ from rich.console import Console
 from rich.table import Table
 
 from agentbench.cases.loader import list_enabled_cases, load_manifest
+from agentbench.models.results import BenchmarkReport
+from cli.reporting import (
+    compute_insights,
+    render_insights,
+    render_per_topic_tables,
+    render_step_breakdown,
+    render_summary_table,
+)
 
 app = typer.Typer(help="AgentBench - AI Agent Evaluation Framework")
 console = Console()
@@ -58,6 +66,7 @@ def run(
 def report(
     benchmark_id: str = typer.Argument(..., help="Benchmark ID"),
     watch: bool = typer.Option(False, "--watch", "-w", help="Watch for completion"),
+    per_case: bool = typer.Option(True, "--per-case/--no-per-case", help="Show per-case breakdown"),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
 ) -> None:
     """Get benchmark report."""
@@ -87,20 +96,24 @@ def report(
             console.print(f"Workflow: {result.get('workflow_id')}")
             console.print(f"Case Count: {result.get('case_count')}")
 
-            # Agent summaries
-            if result.get("agents"):
-                table = Table(title="Agent Performance")
-                table.add_column("Agent", style="cyan")
-                table.add_column("Avg Score", style="green")
-                table.add_column("P50 Latency", style="yellow")
+            report = BenchmarkReport.model_validate(result)
 
-                for agent in result["agents"]:
-                    table.add_row(
-                        agent["agent_id"],
-                        f"{agent['avg_score']:.2f}",
-                        f"{agent['p50_latency_ms']}ms",
-                    )
-                console.print(table)
+            # Agent summaries (always shown)
+            if report.agents:
+                console.print(render_summary_table(report.agents))
+
+            # Per-case sections (only when --per-case)
+            if per_case:
+                topic_tables = render_per_topic_tables(report, console.width)
+                for tbl in topic_tables:
+                    console.print(tbl)
+
+                console.print(render_step_breakdown(report.agents))
+
+                insights = compute_insights(
+                    report.agents, report.per_case_scores, report.per_case_topics
+                )
+                console.print(render_insights(insights))
 
             break
 

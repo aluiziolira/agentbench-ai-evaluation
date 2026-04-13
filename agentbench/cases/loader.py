@@ -23,6 +23,38 @@ from agentbench.cases.models import (
     ReviewFindingTruth,
 )
 
+# Ordered alias map: first match wins when scanning tags left-to-right.
+_TOPIC_ALIAS_MAP: list[tuple[list[str], str]] = [
+    (["testing", "coverage"], "Testing"),
+    (["validation", "input-sanitization"], "Input Validation"),
+    (["null-safety", "defensive-programming"], "Null Safety"),
+    (["backward-compatibility", "contract"], "API Compatibility"),
+    (["error-handling", "robustness", "file-io"], "Error Handling"),
+    (["caching", "state", "consistency"], "Caching/State"),
+    (["performance", "database", "n+1", "optimization"], "Database/N+1"),
+    (["auth", "security", "admin"], "Auth/Security"),
+]
+
+
+def resolve_case_topic(tags: list[str]) -> str:
+    """Map case tags to a single canonical topic name.
+
+    Scans *tags* in order against the alias map and returns the canonical
+    topic for the first matching alias (case-insensitive).  Falls back to
+    ``"Other"`` when no alias matches.
+
+    Args:
+        tags: Raw tag strings from case metadata.
+
+    Returns:
+        A canonical topic string.
+    """
+    lowered = {tag.lower() for tag in tags}
+    for aliases, topic in _TOPIC_ALIAS_MAP:
+        if any(alias in lowered for alias in aliases):
+            return topic
+    return "Other"
+
 
 def load_manifest(manifest_path: Path) -> CaseSetManifest:
     """Load and validate a CaseSetManifest from a manifest.json file.

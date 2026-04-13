@@ -438,6 +438,9 @@ class TestBenchmarkReportGeneration:
         assert report.per_case_scores["case-1"]["gpt-4o-mini"] == 2.5
         assert report.per_case_scores["case-1"]["claude-haiku-4-5"] == 2.2
 
+        # Check per-case topics
+        assert report.per_case_topics["case-1"] == "Auth/Security"  # tag ["auth"]
+
     async def test_compute_benchmark_report_multiple_cases(self, aggregator):
         """Test computing a benchmark report with multiple cases."""
         # Arrange
@@ -512,6 +515,11 @@ class TestBenchmarkReportGeneration:
         assert gpt_summary.avg_score == 1.9  # (2.0 + 1.8) / 2
 
         claude_summary = next(a for a in report.agents if a.agent_id == "claude-haiku-4-5")
+        assert claude_summary.avg_score == 2.0  # (1.9 + 2.1) / 2
+
+        # Check per-case topics
+        assert report.per_case_topics["case-1"] == "Auth/Security"  # tag ["auth"]
+        assert report.per_case_topics["case-2"] == "Other"  # tag ["api"] -> no match
         assert claude_summary.avg_score == 2.0  # (1.9 + 2.1) / 2
 
     async def test_generate_benchmark_report_when_complete(
@@ -818,3 +826,68 @@ class TestStepBreakdown:
 
         # s2_summary: (0.9 + 0.6) / 2 = 0.75
         assert gpt_summary.step_breakdown["s2_summary"] == 0.75
+
+
+class TestPerCaseTopics:
+    """Tests for per-case topic resolution in benchmark reports."""
+
+    async def test_empty_tags_fall_back_to_other(self, aggregator):
+        """Test that cases with no matching tags get 'Other' topic."""
+        run_reports = [
+            RunReport(
+                run_id="run-1",
+                benchmark_id="bench-1",
+                case_id="case-x",
+                case_tags=[],
+                agent_id="gpt-4o-mini",
+                workflow_id="wf_pr_review_v1",
+                total_score=1.0,
+                step_scores=[],
+                total_latency_ms=100,
+                completed_at=datetime.now(UTC).isoformat(),
+            ),
+        ]
+        report = aggregator._compute_benchmark_report(
+            benchmark_id="bench-1",
+            workflow_id="wf_pr_review_v1",
+            case_set_id="pr_review_cases_v1",
+            run_reports=run_reports,
+        )
+        assert report.per_case_topics["case-x"] == "Other"
+
+    async def test_topic_from_first_report_tags(self, aggregator):
+        """Test that topic is resolved from first RunReport's tags per case."""
+        run_reports = [
+            RunReport(
+                run_id="run-1",
+                benchmark_id="bench-1",
+                case_id="case-t",
+                case_tags=["testing", "coverage"],
+                agent_id="gpt-4o-mini",
+                workflow_id="wf_pr_review_v1",
+                total_score=1.0,
+                step_scores=[],
+                total_latency_ms=100,
+                completed_at=datetime.now(UTC).isoformat(),
+            ),
+            RunReport(
+                run_id="run-2",
+                benchmark_id="bench-1",
+                case_id="case-t",
+                case_tags=["auth"],
+                agent_id="claude-haiku-4-5",
+                workflow_id="wf_pr_review_v1",
+                total_score=1.0,
+                step_scores=[],
+                total_latency_ms=100,
+                completed_at=datetime.now(UTC).isoformat(),
+            ),
+        ]
+        report = aggregator._compute_benchmark_report(
+            benchmark_id="bench-1",
+            workflow_id="wf_pr_review_v1",
+            case_set_id="pr_review_cases_v1",
+            run_reports=run_reports,
+        )
+        # First report's tags ["testing", "coverage"] -> "Testing"
+        assert report.per_case_topics["case-t"] == "Testing"

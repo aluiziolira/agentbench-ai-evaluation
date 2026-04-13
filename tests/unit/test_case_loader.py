@@ -14,6 +14,7 @@ from agentbench.cases.loader import (
     load_case,
     load_case_set,
     load_manifest,
+    resolve_case_topic,
 )
 from agentbench.cases.models import (
     CaseManifestEntry,
@@ -741,3 +742,42 @@ class TestLoaderIntegration:
             "pr_001_missing_auth_check",
             "pr_002_api_contract_break",
         }
+
+
+class TestResolveCaseTopic:
+    """Tests for the resolve_case_topic function."""
+
+    def test_pr_001_auth_security(self) -> None:
+        assert resolve_case_topic(["auth", "api", "tests"]) == "Auth/Security"
+
+    def test_pr_002_testing(self) -> None:
+        assert resolve_case_topic(["tests", "coverage"]) == "Testing"
+
+    def test_pr_003_null_safety(self) -> None:
+        assert resolve_case_topic(["null-safety", "defensive-programming"]) == "Null Safety"
+
+    def test_pr_004_api_compatibility(self) -> None:
+        assert resolve_case_topic(["backward-compatibility", "contract"]) == "API Compatibility"
+
+    def test_pr_005_error_handling(self) -> None:
+        assert resolve_case_topic(["error-handling", "robustness", "file-io"]) == "Error Handling"
+
+    def test_pr_006_caching_state(self) -> None:
+        assert resolve_case_topic(["caching", "state", "consistency"]) == "Caching/State"
+
+    def test_pr_007_input_validation(self) -> None:
+        assert resolve_case_topic(["validation", "input-sanitization"]) == "Input Validation"
+
+    def test_pr_008_database_n1(self) -> None:
+        assert resolve_case_topic(["performance", "database", "n+1", "optimization"]) == "Database/N+1"
+
+    def test_unknown_tags_returns_other(self) -> None:
+        assert resolve_case_topic(["foo", "bar"]) == "Other"
+
+    def test_empty_tags_returns_other(self) -> None:
+        assert resolve_case_topic([]) == "Other"
+
+    def test_case_insensitive(self) -> None:
+        assert resolve_case_topic(["AUTH", "Security", "Admin"]) == "Auth/Security"
+        assert resolve_case_topic(["Testing", "Coverage"]) == "Testing"
+        assert resolve_case_topic(["N+1"]) == "Database/N+1"

@@ -45,3 +45,4 @@ class BenchmarkReport(BaseModel):
     case_count: int
     agents: list[AgentSummary]
     per_case_scores: dict[str, dict[str, float]]
+    per_case_topics: dict[str, str] = {}

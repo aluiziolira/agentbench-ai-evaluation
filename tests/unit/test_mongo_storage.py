@@ -146,6 +146,7 @@ def create_test_benchmark_report() -> BenchmarkReport:
             ),
         ],
         per_case_scores={"pr_001": {"gpt-4o-mini": 0.9}},
+        per_case_topics={"pr_001": "Auth/Security"},
     )
 
 
@@ -429,6 +430,7 @@ class TestBenchmarkReportCRUD:
         assert retrieved.benchmark_id == report.benchmark_id
         assert retrieved.case_count == 2
         assert len(retrieved.agents) == 1
+        assert retrieved.per_case_topics == {"pr_001": "Auth/Security"}
 
     async def test_get_benchmark_report_not_found(self, storage: MongoStorage) -> None:
         """Test retrieving non-existent benchmark report returns None."""

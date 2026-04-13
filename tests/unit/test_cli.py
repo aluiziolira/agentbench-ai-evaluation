@@ -18,6 +18,38 @@ def _strip_ansi(text: str) -> str:
     return ansi_escape.sub("", text)
 
 
+def _completed_report_data(*, agents: list[dict]) -> dict:
+    """Build a valid BenchmarkReport JSON payload for mock API responses."""
+    # Ensure every agent has all required AgentSummary fields
+    full_agents = []
+    for a in agents:
+        full_agents.append({
+            "agent_id": a["agent_id"],
+            "avg_score": a["avg_score"],
+            "p50_latency_ms": a["p50_latency_ms"],
+            "p95_latency_ms": a.get("p95_latency_ms", a["p50_latency_ms"] * 3),
+            "failure_rate": a.get("failure_rate", 0.0),
+            "step_breakdown": a.get("step_breakdown", {}),
+        })
+    return {
+        "benchmark_id": "bench-123",
+        "workflow_id": "wf_pr_review_v1",
+        "case_set_id": "pr_review_cases_v1",
+        "created_at": "2024-01-01T00:00:00Z",
+        "case_count": 2,
+        "status": "completed",
+        "agents": full_agents,
+        "per_case_scores": {
+            "pr_001": {"gpt-4o-mini": 0.9, "claude-haiku-4-5": 0.85},
+            "pr_002": {"gpt-4o-mini": 0.8, "claude-haiku-4-5": 0.9},
+        },
+        "per_case_topics": {
+            "pr_001": "Auth/Security",
+            "pr_002": "Testing",
+        },
+    }
+
+
 class TestVersionCommand:
     """Tests for the version command."""
 
@@ -328,18 +360,11 @@ class TestReportCommand:
     @patch("httpx.get")
     def test_report_shows_completed_benchmark(self, mock_get):
         """Test that report command displays completed benchmark."""
-        # Setup mock response for completed benchmark
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "benchmark_id": "bench-123",
-            "workflow_id": "wf_pr_review_v1",
-            "case_count": 5,
-            "status": "completed",
-            "agents": [
-                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
-                {"agent_id": "claude-haiku-4-5", "avg_score": 0.82, "p50_latency_ms": 1100},
-            ],
-        }
+        mock_response.json.return_value = _completed_report_data(agents=[
+            {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            {"agent_id": "claude-haiku-4-5", "avg_score": 0.82, "p50_latency_ms": 1100},
+        ])
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -370,7 +395,6 @@ class TestReportCommand:
     @patch("httpx.get")
     def test_report_watch_waits_for_completion(self, mock_get, mock_sleep):
         """Test that report --watch waits for benchmark completion."""
-        # First call returns in_progress, second returns completed
         mock_response_in_progress = MagicMock()
         mock_response_in_progress.json.return_value = {
             "benchmark_id": "bench-123",
@@ -379,13 +403,7 @@ class TestReportCommand:
         mock_response_in_progress.raise_for_status = MagicMock()
 
         mock_response_completed = MagicMock()
-        mock_response_completed.json.return_value = {
-            "benchmark_id": "bench-123",
-            "workflow_id": "wf_pr_review_v1",
-            "case_count": 5,
-            "status": "completed",
-            "agents": [],
-        }
+        mock_response_completed.json.return_value = _completed_report_data(agents=[])
         mock_response_completed.raise_for_status = MagicMock()
 
         mock_get.side_effect = [mock_response_in_progress, mock_response_completed]
@@ -395,6 +413,73 @@ class TestReportCommand:
         assert "Benchmark Complete" in result.output
         mock_sleep.assert_called_once_with(5)
 
+
+class TestPerCaseFlag:
+    """Tests for the --per-case/--no-per-case flag on report command."""
+
+    def test_report_help_shows_per_case_flag(self):
+        """Test that report help shows --per-case/--no-per-case option."""
+        result = runner.invoke(app, ["report", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "--per-case" in output
+        assert "--no-per-case" in output
+
+    @patch("httpx.get")
+    def test_default_includes_per_case_sections(self, mock_get):
+        """Test default invocation shows per-case sections (per_case=True)."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(agents=[
+            {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+        ])
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-123"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        # Per-case sections should be present
+        assert "Step Breakdown" in output
+        assert "Insights" in output
+
+    @patch("httpx.get")
+    def test_no_per_case_suppresses_sections(self, mock_get):
+        """Test that --no-per-case suppresses per-case sections."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(agents=[
+            {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+        ])
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-123", "--no-per-case"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        # Per-case sections should NOT be present
+        assert "Step Breakdown" not in output
+        assert "Insights" not in output
+
+    @patch("httpx.get")
+    @patch("cli.main.time.sleep")
+    def test_watch_unchanged_with_no_per_case(self, mock_sleep, mock_get):
+        """Test that --watch behavior is unchanged regardless of --no-per-case."""
+        mock_in_progress = MagicMock()
+        mock_in_progress.json.return_value = {
+            "benchmark_id": "bench-123",
+            "status": "in_progress",
+        }
+        mock_in_progress.raise_for_status = MagicMock()
+
+        mock_completed = MagicMock()
+        mock_completed.json.return_value = _completed_report_data(agents=[])
+        mock_completed.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [mock_in_progress, mock_completed]
+
+        result = runner.invoke(app, ["report", "bench-123", "--watch", "--no-per-case"])
+        assert result.exit_code == 0
+        assert "Benchmark Complete" in result.output
+        mock_sleep.assert_called_once_with(5)
 
 class TestRescoreCommand:
     """Tests for the rescore command."""
@@ -471,8 +556,9 @@ class TestCLIHelp:
         result = runner.invoke(app, ["report", "--help"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
-        assert "BENCHMARK_ID" in output
         assert "--watch" in output
+        assert "--per-case" in output
+        assert "--no-per-case" in output
 
     def test_list_cases_help(self):
         """Test that list-cases command help shows options."""
@@ -481,3 +567,41 @@ class TestCLIHelp:
         output = _strip_ansi(result.output)
         assert "--case-set" in output
         assert "--fixtures-dir" in output
+
+
+class TestLegacyReport:
+    """Tests for backward-compatible legacy report handling."""
+
+    @patch("httpx.get")
+    def test_legacy_report_renders(self, mock_get):
+        """Legacy report without per_case_topics renders without crashing."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "benchmark_id": "bench-legacy-001",
+            "workflow_id": "wf_pr_review_v1",
+            "case_set_id": "pr_review_cases_v1",
+            "created_at": "2026-03-15T08:00:00Z",
+            "case_count": 2,
+            "status": "completed",
+            "agents": [
+                {
+                    "agent_id": "claude-haiku-4-5",
+                    "avg_score": 0.85,
+                    "p50_latency_ms": 2000,
+                    "p95_latency_ms": 4000,
+                    "failure_rate": 0.0,
+                    "step_breakdown": {},
+                },
+            ],
+            "per_case_scores": {
+                "pr_001_missing_auth_check": {"claude-haiku-4-5": 0.90},
+                "pr_002_missing_test_coverage": {"claude-haiku-4-5": 0.80},
+            },
+            # per_case_topics intentionally omitted
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-legacy-001"])
+        assert result.exit_code == 0
+        assert "claude-haiku-4-5" in result.output
