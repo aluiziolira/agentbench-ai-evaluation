@@ -46,43 +46,27 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-env:
-  AGENTBENCH_INTEGRATION_TEST: "1"
-  REDIS_URL: redis://127.0.0.1:6379/0
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  MONGODB_URI: mongodb://admin:changeme@127.0.0.1:27017/agentbench?authSource=admin
+    env:
+      AGENTBENCH_INTEGRATION_TEST: "1"
+      REDIS_URL: redis://127.0.0.1:6379/0
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      MONGODB_URI: mongodb://admin:changeme@127.0.0.1:27017/agentbench?authSource=admin
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-agentbench
         with:
           python-version: "3.12"
+          just-version: "1.39.0"
+          uv-cache-enabled: "true"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Cache uv
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Sync dependencies
-        run: uv sync --dev
+      - name: Validate justfile
+        run: just --list > /dev/null
 
       - name: Wait for services
-        run: |
-          for port in 27017 6379; do
-            echo "Waiting for port $port..."
-            for i in $(seq 1 30); do
-              nc -z localhost $port && break
-              sleep 1
-            done
-            nc -z localhost $port || { echo "ERROR: Port $port not ready after 30s"; exit 1; }
-          done
-          echo "All services ready."
+        run: just health
 
       - name: Validate required secrets
         run: |
@@ -90,39 +74,14 @@ env:
           test -n "$ANTHROPIC_API_KEY"
 
       - name: Seed database
-        run: uv run agentbench seed --mongo-uri "$MONGODB_URI"
-      - name: Start runtime worker
-        run: |
-          uv run python -m agentbench.main > runtime.log 2>&1 &
-          echo "RUNTIME_PID=$!" >> $GITHUB_ENV
+        run: just seed
 
-      - name: Start API server
-        run: |
-          uv run python start_api.py > api.log 2>&1 &
-          echo "API_PID=$!" >> $GITHUB_ENV
-
-      - name: Wait for API readiness
-        run: |
-          tail -f runtime.log api.log &
-          TAIL_PID=$!
-          echo "Waiting for /health readiness..."
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/health > /dev/null; then
-              echo "API ready after $i attempts."
-              kill $TAIL_PID 2>/dev/null || true
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "ERROR: API not ready after 60s"
-          kill $TAIL_PID 2>/dev/null || true
-          cat runtime.log
-          cat api.log
-          exit 1
+      - name: Start background services
+        run: just services-bg
 
       - name: Run gated integration tests
         timeout-minutes: 10
-        run: uv run pytest "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}" -q
+        run: just test-integration "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}"
 
       - name: Debug service connectivity on failure
         if: failure()
@@ -139,11 +98,9 @@ env:
         with:
           name: integration-logs
           path: |
-            api.log
-            runtime.log
+            /tmp/agentbench/api.log
+            /tmp/agentbench/runtime.log
 
       - name: Stop background processes
         if: always()
-        run: |
-          [[ -n "$RUNTIME_PID" ]] && kill $RUNTIME_PID 2>/dev/null || true
-          [[ -n "$API_PID" ]] && kill $API_PID 2>/dev/null || true
+        run: just services-stop
