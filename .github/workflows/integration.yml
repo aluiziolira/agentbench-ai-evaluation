@@ -52,6 +52,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       MONGODB_URI: mongodb://admin:changeme@127.0.0.1:27017/agentbench?authSource=admin
+      API_PORT: 8000
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -65,7 +66,7 @@ jobs:
       - name: Validate justfile
         run: just --list > /dev/null
 
-      - name: Wait for services
+      - name: Wait for infrastructure services
         run: just health
 
       - name: Validate required secrets
@@ -73,11 +74,41 @@ jobs:
           test -n "$OPENAI_API_KEY"
           test -n "$ANTHROPIC_API_KEY"
 
-      - name: Seed database and run integration tests
+      - name: Seed database
+        run: just seed
+
+      - name: Start runtime (background)
+        run: |
+          RUNNER_TRACKING_ID="" nohup uv run python -m agentbench.main > /tmp/agentbench/runtime.log 2>&1 &
+          echo $! > /tmp/agentbench/runtime.pid
+          echo "Runtime started with PID: $(cat /tmp/agentbench/runtime.pid)"
+
+      - name: Start API server (background)
+        run: |
+          RUNNER_TRACKING_ID="" nohup uv run python start_api.py > /tmp/agentbench/api.log 2>&1 &
+          echo $! > /tmp/agentbench/api.pid
+          echo "API started with PID: $(cat /tmp/agentbench/api.pid)"
+
+      - name: Wait for API to be ready
+        timeout-minutes: 2
+        run: |
+          echo "Waiting for API to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:${API_PORT}/health > /dev/null 2>&1; then
+              echo "✓ API ready after ${i}s"
+              exit 0
+            fi
+            echo "Attempt $i/30: API not ready yet..."
+            sleep 2
+          done
+          echo "API failed to start. Logs:"
+          cat /tmp/agentbench/api.log 2>/dev/null || echo "No API logs found"
+          exit 1
+
+      - name: Run integration tests
         timeout-minutes: 10
         run: |
-          just seed
-          just ci-integration-test "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}"
+          uv run pytest "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}" -v
 
       - name: Debug service connectivity on failure
         if: failure()
@@ -85,8 +116,18 @@ jobs:
           docker ps
           nc -zv localhost 6379 || echo "Redis unreachable"
           nc -zv localhost 27017 || echo "MongoDB unreachable"
+          nc -zv localhost ${API_PORT} || echo "API unreachable"
           docker logs ${{ job.services.redis.id }} 2>&1 | tail -20 || true
           docker logs ${{ job.services.mongodb.id }} 2>&1 | tail -20 || true
+
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          echo "=== Runtime Logs ==="
+          cat /tmp/agentbench/runtime.log 2>/dev/null || echo "No runtime logs found"
+          echo ""
+          echo "=== API Logs ==="
+          cat /tmp/agentbench/api.log 2>/dev/null || echo "No API logs found"
 
       - name: Upload integration logs
         if: always()
@@ -97,6 +138,15 @@ jobs:
             /tmp/agentbench/api.log
             /tmp/agentbench/runtime.log
 
-      - name: Stop background processes
+      - name: Stop background services
         if: always()
-        run: just services-stop
+        run: |
+          if [ -f /tmp/agentbench/runtime.pid ]; then
+            kill $(cat /tmp/agentbench/runtime.pid) 2>/dev/null || true
+            echo "Stopped runtime (PID: $(cat /tmp/agentbench/runtime.pid))"
+          fi
+          if [ -f /tmp/agentbench/api.pid ]; then
+            kill $(cat /tmp/agentbench/api.pid) 2>/dev/null || true
+            echo "Stopped API (PID: $(cat /tmp/agentbench/api.pid))"
+          fi
+          rm -f /tmp/agentbench/runtime.pid /tmp/agentbench/api.pid
