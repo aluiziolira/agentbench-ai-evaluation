@@ -67,7 +67,7 @@ async def test_full_benchmark_pipeline(api_client, require_api_keys):
         ["agentbench", "seed"],
         capture_output=True,
         text=True,
-        cwd="/home/aluizio/aluizio-projects/agentbench-ai-evaluation",
+        cwd=str(Path(__file__).parent.parent.parent),
     )
     assert result.returncode == 0, f"Seed failed: {result.stderr}"
 

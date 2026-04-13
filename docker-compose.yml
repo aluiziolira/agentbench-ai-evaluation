@@ -3,7 +3,8 @@ services:
     image: mongo:7
     container_name: agentbench-mongodb
     restart: unless-stopped
-    expose:
+    ports:
+      - "27017:27017"
       - "27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
@@ -28,7 +29,8 @@ services:
     image: redis:7-alpine
     container_name: agentbench-redis
     restart: unless-stopped
-    expose:
+    ports:
+      - "6379:6379"
       - "6379"
     volumes:
       - redis_data:/data

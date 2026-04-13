@@ -91,6 +91,9 @@ jobs:
           echo "ERROR: API not ready after 60s"
           exit 1
 
+      - name: Seed database
+        run: uv run agentbench seed
+
       - name: Run gated integration tests
         run: uv run pytest "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}" -q
 
