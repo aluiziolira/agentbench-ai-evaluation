@@ -192,6 +192,43 @@ services-stop:
     @pkill -f "python start_api.py" 2>/dev/null || true
     @just _status "Services stopped"
 
+# CI-specific integration test runner (handles process lifecycle properly)
+[group('ci')]
+ci-integration-test *selector="tests/integration/test_pipeline.py":
+    @#!/usr/bin/env bash
+    @set -euo pipefail
+    @just _status "Starting services for CI integration test..."
+    @mkdir -p /tmp/{{PROJECT_NAME}}
+    @
+    @# Kill any existing processes
+    @pkill -f "python -m agentbench.main" 2>/dev/null || true
+    @pkill -f "python start_api.py" 2>/dev/null || true
+    @sleep 1
+    @
+    @# Start runtime with process group isolation (prevents SIGTERM propagation)
+    @(setsid uv run python -m agentbench.main > /tmp/{{PROJECT_NAME}}/runtime.log 2>&1 &)
+    @# Start API with process group isolation
+    @(setsid uv run python start_api.py > /tmp/{{PROJECT_NAME}}/api.log 2>&1 &)
+    @
+    @# Wait for API to be ready
+    @sleep 3
+    @for i in {1..30}; do
+    @  if curl -sf http://localhost:{{API_PORT}}/health >/dev/null 2>&1; then
+    @    echo "✓ API ready after ${i}s"
+    @    break
+    @  fi
+    @  sleep 1
+    @done
+    @
+    @# Run tests
+    @just _status "Running integration tests..."
+    @AGENTBENCH_INTEGRATION_TEST=1 uv run pytest {{selector}} -v
+    @
+    @# Cleanup
+    @just _status "Cleaning up services..."
+    @pkill -f "python -m agentbench.main" 2>/dev/null || true
+    @pkill -f "python start_api.py" 2>/dev/null || true
+
 # Development mode: start everything + watch logs
 [group('dev')]
 dev: start services-bg

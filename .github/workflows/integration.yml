@@ -77,8 +77,7 @@ jobs:
         timeout-minutes: 10
         run: |
           just seed
-          just services-bg
-          just test-integration "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}"
+          just ci-integration-test "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}"
 
       - name: Debug service connectivity on failure
         if: failure()
