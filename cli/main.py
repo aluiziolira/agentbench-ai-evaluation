@@ -22,7 +22,7 @@ def run(
         ["gpt-4o-mini", "claude-haiku-4-5"], "--agents", "-a", help="Agent IDs"
     ),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
-):
+) -> None:
     import uuid
 
     import httpx
@@ -57,7 +57,7 @@ def report(
     benchmark_id: str = typer.Argument(..., help="Benchmark ID"),
     watch: bool = typer.Option(False, "--watch", "-w", help="Watch for completion"),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
-):
+) -> None:
     """Get benchmark report."""
     import httpx
 
@@ -113,7 +113,7 @@ def list_cases(
     fixtures_dir: Path = typer.Option(  # noqa: B008
         Path("fixtures/pr_review"), "--fixtures-dir", help="Fixtures directory"
     ),
-):
+) -> None:
     """List available cases in a case set."""
     try:
         manifest = load_manifest(fixtures_dir / "manifest.json")
@@ -151,14 +151,14 @@ def seed(
     fixtures_dir: Path = typer.Option(  # noqa: B008
         Path("fixtures/pr_review"), "--fixtures-dir", help="Fixtures directory"
     ),
-):
+) -> None:
     """Seed the database with initial data."""
     import json
 
     from agentbench.models import WorkflowDefinition
     from agentbench.storage.mongo import MongoStorage
 
-    async def do_seed():
+    async def do_seed() -> None:
         mongo = MongoStorage(mongo_uri, "agentbench")
         await mongo.setup_indexes()
 
@@ -187,7 +187,7 @@ def rescore(
     step: str = typer.Option(..., "--step", help="Step ID"),
     strategy: str = typer.Option(..., "--strategy", help="Scoring strategy"),
     rubric: str | None = typer.Option(None, "--rubric", help="Scoring rubric"),
-):
+) -> None:
     """Re-score a step with different parameters."""
     console.print(f"[bold blue]Re-scoring run {run_id}, step {step}...[/]")
     console.print(f"Strategy: {strategy}")
@@ -199,7 +199,7 @@ def rescore(
 
 
 @app.command()
-def version():
+def version() -> None:
     """Show version information."""
     console.print("AgentBench v0.1.0")
 
@@ -209,7 +209,7 @@ def serve(
     host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
     port: int = typer.Option(8000, "--port", "-p", help="Port to bind to"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
-):
+) -> None:
     """Start the AgentBench API server."""
     import uvicorn
 

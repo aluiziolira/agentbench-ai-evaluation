@@ -253,7 +253,7 @@ class MongoStorage:
         doc = await self.db.workflows.find_one({"workflow_id": workflow_id, "version": version})
         if doc is None:
             raise WorkflowNotFoundError(f"Workflow {workflow_id} version {version} not found")
-        return doc.get("status") != "published"
+        return doc.get("status") != "published"  # type: ignore[return-value]
 
     async def _enforce_immutability(self, workflow_id: str, version: str) -> None:
         """Enforce immutability rule for published workflows.

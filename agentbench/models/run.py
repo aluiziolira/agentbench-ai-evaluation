@@ -1,6 +1,5 @@
-"""Run models."""
-
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -23,7 +22,7 @@ class EvaluationRun(BaseModel):
     case_set_id: str
     case_id: str
     agent_id: str
-    agent_config: dict
+    agent_config: dict[str, Any]
     state: RunState = RunState.PENDING
     current_step: int = 0
     created_at: str

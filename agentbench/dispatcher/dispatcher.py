@@ -19,6 +19,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from agentbench.cases.loader import load_case
 from agentbench.cases.models import ReviewCaseDefinition
@@ -94,7 +95,7 @@ class StepDispatcher:
         self,
         run: EvaluationRun,
         step: StepDefinition,
-        request: dict,
+        request: dict[str, Any],
         response: str,
         latency_ms: int,
     ) -> Path:

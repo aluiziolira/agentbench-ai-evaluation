@@ -4,7 +4,7 @@ This module defines the AgentAdapter protocol that all provider adapters
 must implement, ensuring a consistent interface for invoking AI agents.
 """
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from agentbench.models.run import EvaluationRun
 from agentbench.models.workflow import StepDefinition
@@ -36,7 +36,7 @@ class AgentAdapter(Protocol):
         self,
         step: StepDefinition,
         run: EvaluationRun,
-        conversation_history: list[dict],
+        conversation_history: list[dict[str, Any]],
     ) -> tuple[str, int]:
         """Invoke the agent for a workflow step.
 

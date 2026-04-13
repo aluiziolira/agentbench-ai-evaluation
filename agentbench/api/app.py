@@ -42,5 +42,5 @@ app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "healthy"}

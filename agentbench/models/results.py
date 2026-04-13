@@ -1,4 +1,4 @@
-"""Results models."""
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ class StepScore(BaseModel):
     weighted_score: float
     latency_ms: int
     passed: bool
-    details: dict = {}
+    details: dict[str, Any] = {}
 
 
 class RunReport(BaseModel):

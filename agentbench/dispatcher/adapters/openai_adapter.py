@@ -66,7 +66,7 @@ class OpenAIAdapter:
         self,
         step: StepDefinition,
         run: EvaluationRun,
-        conversation_history: list[dict],
+        conversation_history: list[dict[str, Any]],
     ) -> tuple[str, int]:
         """Invoke the OpenAI model for a workflow step.
 

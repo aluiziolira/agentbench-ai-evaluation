@@ -1,6 +1,7 @@
 """Redis storage layer for AgentBench FSM and tracking."""
 
 import logging
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -89,7 +90,7 @@ class RedisStorage:
 
     # Workflow Caching
     async def cache_workflow(
-        self, workflow_id: str, version: str, workflow_data: dict, ttl: int = 86400
+        self, workflow_id: str, version: str, workflow_data: dict[str, Any], ttl: int = 86400
     ) -> None:
         key = f"workflow:{workflow_id}:{version}"
         client = await self._get_client()
@@ -97,7 +98,7 @@ class RedisStorage:
         await client.expire(key, ttl)
         logger.debug(f"Cached workflow: {workflow_id}:{version}")
 
-    async def get_cached_workflow(self, workflow_id: str, version: str) -> dict | None:
+    async def get_cached_workflow(self, workflow_id: str, version: str) -> dict[str, Any] | None:
         key = f"workflow:{workflow_id}:{version}"
         client = await self._get_client()
         data = await client.hgetall(key)

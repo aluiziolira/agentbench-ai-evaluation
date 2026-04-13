@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
 # CRITICAL: Must import redis at module level for exception handling
 import redis.asyncio as redis_module
@@ -176,7 +177,7 @@ class EventBus:
 
                 await asyncio.sleep(1)
 
-    def _deserialize_event(self, fields: dict) -> EventEnvelope:
+    def _deserialize_event(self, fields: dict[str, Any]) -> EventEnvelope:
         """Deserialize event from Redis stream fields."""
         if b"data" in fields:
             data = json.loads(fields[b"data"])

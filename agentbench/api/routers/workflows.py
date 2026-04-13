@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.post("")
-async def register_workflow(workflow: WorkflowDefinition, req: Request):
+async def register_workflow(workflow: WorkflowDefinition, req: Request) -> dict[str, str]:
     """Register a new workflow definition."""
     mongo = req.app.state.mongo
 
@@ -20,7 +20,7 @@ async def register_workflow(workflow: WorkflowDefinition, req: Request):
 
 
 @router.get("/{workflow_id}")
-async def get_workflow(workflow_id: str, req: Request):
+async def get_workflow(workflow_id: str, req: Request) -> WorkflowDefinition:
     """Get latest published workflow version."""
     mongo = req.app.state.mongo
 
@@ -32,7 +32,7 @@ async def get_workflow(workflow_id: str, req: Request):
 
 
 @router.post("/{workflow_id}/publish")
-async def publish_workflow(workflow_id: str, version: str, req: Request):
+async def publish_workflow(workflow_id: str, version: str, req: Request) -> dict[str, str]:
     """Publish a workflow version."""
     mongo = req.app.state.mongo
 

@@ -66,7 +66,7 @@ class AnthropicAdapter:
         self,
         step: StepDefinition,
         run: EvaluationRun,
-        conversation_history: list[dict],
+        conversation_history: list[dict[str, Any]],
     ) -> tuple[str, int]:
         """Invoke the Anthropic model for a workflow step.
 
@@ -133,7 +133,7 @@ class AnthropicAdapter:
 
     def _build_messages(
         self,
-        conversation_history: list[dict],
+        conversation_history: list[dict[str, Any]],
         prompt: str,
     ) -> list[dict[str, Any]]:
         """Build messages list for Anthropic API.

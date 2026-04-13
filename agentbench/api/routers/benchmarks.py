@@ -1,11 +1,12 @@
 """Benchmark API endpoints."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from agentbench.models import EVALUATION_RUN_REQUESTED, EventEnvelope
+from agentbench.models import EVALUATION_RUN_REQUESTED, BenchmarkReport, EventEnvelope
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ class BenchmarkResponse(BaseModel):
 async def create_benchmark(
     request: CreateBenchmarkRequest,
     req: Request,
-):
+) -> BenchmarkResponse:
     """Trigger a new benchmark run."""
     import uuid
 
@@ -61,7 +62,7 @@ async def create_benchmark(
 
 
 @router.get("/{benchmark_id}")
-async def get_benchmark(benchmark_id: str, req: Request):
+async def get_benchmark(benchmark_id: str, req: Request) -> dict[str, Any] | BenchmarkReport:
     """Get benchmark report (202 if in progress)."""
     mongo = req.app.state.mongo
     redis = req.app.state.redis
@@ -81,7 +82,7 @@ async def get_benchmark(benchmark_id: str, req: Request):
 
 
 @router.get("/{benchmark_id}/runs")
-async def list_benchmark_runs(benchmark_id: str, req: Request):
+async def list_benchmark_runs(benchmark_id: str, req: Request) -> list[dict[str, Any]]:
     """List run summaries for a benchmark."""
     mongo = req.app.state.mongo
 

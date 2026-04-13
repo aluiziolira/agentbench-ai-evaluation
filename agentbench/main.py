@@ -213,7 +213,7 @@ class AgentBenchRuntime:
             await self.stop()
 
 
-async def main():
+async def main() -> None:
     """Main entry point."""
     runtime = AgentBenchRuntime()
     try:
@@ -226,7 +226,7 @@ async def main():
         raise
 
 
-def _main_entry_point():
+def _main_entry_point() -> None:
     """Synchronous entry point for the application.
 
     Handles the asyncio.run() call with proper error handling.

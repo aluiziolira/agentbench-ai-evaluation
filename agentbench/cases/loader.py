@@ -193,7 +193,7 @@ def load_case(case_id: str, fixtures_dir: Path) -> ReviewCaseDefinition:
         case = ReviewCaseDefinition(
             case_id=case_id,
             case_set_id=case_set_id,
-            difficulty=difficulty,  # type: ignore[arg-type]
+            difficulty=difficulty,
             tags=tags,
             ticket_text=ticket_text,
             diff_patch=diff_patch,

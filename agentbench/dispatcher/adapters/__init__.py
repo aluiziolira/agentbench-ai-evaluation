@@ -10,14 +10,14 @@ Example:
     >>> text, latency = await adapter.invoke(step, run, [])
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 from agentbench.dispatcher.adapters.anthropic_adapter import AnthropicAdapter
 from agentbench.dispatcher.adapters.base import AgentAdapter
 from agentbench.dispatcher.adapters.openai_adapter import OpenAIAdapter
 
 
-class _AdapterRegistry(dict):
+class _AdapterRegistry(dict[str, AgentAdapter]):
     """Lazy-initializing adapter registry.
 
     Adapters are created on first access to avoid requiring
@@ -41,7 +41,7 @@ class _AdapterRegistry(dict):
         """Check if key is a supported adapter."""
         return key in self._factories or super().__contains__(key)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         """Iterate over all supported adapter IDs."""
         return iter(self._factories.keys())
 

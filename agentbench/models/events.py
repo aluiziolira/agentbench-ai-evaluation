@@ -1,4 +1,4 @@
-"""Event models."""
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -33,4 +33,4 @@ class EventEnvelope(BaseModel):
     schema_version: str = "1.0"
     timestamp: str
     correlation_id: str
-    payload: dict
+    payload: dict[str, Any]

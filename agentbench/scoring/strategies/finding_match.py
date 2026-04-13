@@ -9,7 +9,7 @@ false positives while remaining deterministic and explainable.
 
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -243,7 +243,7 @@ class FindingMatchStrategy:
         self,
         agent_findings: list[AgentFinding],
         expected_findings: list[ReviewFindingTruth],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Find matches between agent findings and expected findings.
 
         A match requires:
@@ -385,8 +385,8 @@ class FindingMatchStrategy:
         self,
         agent_findings: list[AgentFinding],
         expected_findings: list[ReviewFindingTruth],
-        matches: list[dict],
-    ) -> list[dict]:
+        matches: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Find agent findings that don't match any expected finding.
 
         Args:
@@ -474,9 +474,9 @@ class FindingMatchStrategy:
 
     def _calculate_raw_score(
         self,
-        matches: list[dict],
-        false_positives: list[dict],
-        disallowed: list[dict],
+        matches: list[dict[str, Any]],
+        false_positives: list[dict[str, Any]],
+        disallowed: list[dict[str, Any]],
         expected_findings: list[ReviewFindingTruth],
     ) -> float:
         """Calculate the raw score using the scoring formula.
@@ -538,11 +538,11 @@ class FindingMatchStrategy:
 
     def _build_scoring_breakdown(
         self,
-        matches: list[dict],
-        false_positives: list[dict],
-        disallowed: list[dict],
+        matches: list[dict[str, Any]],
+        false_positives: list[dict[str, Any]],
+        disallowed: list[dict[str, Any]],
         expected_findings: list[ReviewFindingTruth],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build a detailed breakdown of the scoring calculation.
 
         Args:
