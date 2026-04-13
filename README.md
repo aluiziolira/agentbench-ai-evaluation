@@ -4,7 +4,7 @@ A minimal AI agent evaluation framework for PR review behavior, built with event
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://github.com/agentbench/agentbench/actions/workflows/ci.yml/badge.svg)](https://github.com/agentbench/agentbench/actions/workflows/ci.yml)
+[![CI](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml/badge.svg)](https://github.com/agentbench/agentbench/actions/workflows/ci.yml)
 
 ## Project Title
 
@@ -130,8 +130,8 @@ The alternative is live ingestion: pulling PRs and tickets from GitHub, Jira, or
 ```markdown
 # PR-002: Implement order discount calculator
 
-Add a new `DiscountCalculator` service that handles various discount 
-rules for orders, including percentage discounts, fixed amount discounts, 
+Add a new `DiscountCalculator` service that handles various discount
+rules for orders, including percentage discounts, fixed amount discounts,
 and tiered discounts based on order value.
 ```
 
@@ -175,7 +175,7 @@ def calculate_discount(order, discount_code):
   "findings": [
     {
       "canonical_label": "MISSING_TESTS",
-      "severity": "high", 
+      "severity": "high",
       "file_path": "app/services/discount.py",
       "title": "Missing unit tests for discount calculations",
       "why_it_matters": "Without unit tests, there is no assurance that calculations work correctly.",
@@ -186,12 +186,12 @@ def calculate_discount(order, discount_code):
 ```
 
 **Review Summary (Claude Haiku s2_review_summary):**
-> The implementation is missing comprehensive unit tests for the discount 
-> calculation logic, particularly around edge cases for tiered discounts and 
-> discount code validation. The service lacks input validation on the 
-> `calculate_discount` function which could lead to runtime errors with 
-> malformed discount codes. Add thorough test coverage including edge cases 
-> for percentage calculations (e.g., 0%, 100%), invalid discount codes, and 
+> The implementation is missing comprehensive unit tests for the discount
+> calculation logic, particularly around edge cases for tiered discounts and
+> discount code validation. The service lacks input validation on the
+> `calculate_discount` function which could lead to runtime errors with
+> malformed discount codes. Add thorough test coverage including edge cases
+> for percentage calculations (e.g., 0%, 100%), invalid discount codes, and
 > boundary conditions for tiered discount thresholds before merging.
 
 ## Re-Scoring Demo
