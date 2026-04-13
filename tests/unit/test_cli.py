@@ -14,18 +14,8 @@ runner = CliRunner()
 
 def _strip_ansi(text: str) -> str:
     """Strip ANSI escape codes from text for testing."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
-
-import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from typer.testing import CliRunner
-
-from cli.main import app
-
-runner = CliRunner()
+    ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+    return ansi_escape.sub("", text)
 
 
 class TestVersionCommand:
@@ -475,13 +465,6 @@ class TestCLIHelp:
         assert "--case-set" in output
         assert "--agents" in output
         assert "--api-url" in output
-        """Test that run command help shows options."""
-        result = runner.invoke(app, ["run", "--help"])
-        assert result.exit_code == 0
-        assert "--workflow" in result.output
-        assert "--case-set" in result.output
-        assert "--agents" in result.output
-        assert "--api-url" in result.output
 
     def test_report_help(self):
         """Test that report command help shows options."""
@@ -490,11 +473,6 @@ class TestCLIHelp:
         output = _strip_ansi(result.output)
         assert "BENCHMARK_ID" in output
         assert "--watch" in output
-        """Test that report command help shows options."""
-        result = runner.invoke(app, ["report", "--help"])
-        assert result.exit_code == 0
-        assert "BENCHMARK_ID" in result.output
-        assert "--watch" in result.output
 
     def test_list_cases_help(self):
         """Test that list-cases command help shows options."""
@@ -503,8 +481,3 @@ class TestCLIHelp:
         output = _strip_ansi(result.output)
         assert "--case-set" in output
         assert "--fixtures-dir" in output
-        """Test that list-cases command help shows options."""
-        result = runner.invoke(app, ["list-cases", "--help"])
-        assert result.exit_code == 0
-        assert "--case-set" in result.output
-        assert "--fixtures-dir" in result.output
