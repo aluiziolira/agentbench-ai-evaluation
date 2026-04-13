@@ -196,7 +196,7 @@ class LLMJudgeStrategy:
 
         response = await client.chat.completions.create(
             model=self._judge_model,
-            max_tokens=1024,
+            max_completion_tokens=1024,
             temperature=0,  # Deterministic for consistent judging
             messages=[
                 {
