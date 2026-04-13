@@ -222,54 +222,94 @@ git clone <repo-url> && cd agentbench
 pip install uv && uv sync
 cp .env.example .env          # Add OPENAI_API_KEY and ANTHROPIC_API_KEY
 
-docker-compose up -d mongodb redis
-source .env && uv run python -m cli.main seed
+# Bootstrap: start infrastructure, seed database
+just init
 
-# Start services in separate terminals
-source .env && uv run python -m agentbench.main   # Terminal 1: runtime
-source .env && uv run python start_api.py           # Terminal 2: API
+# Start all services in dev mode (foreground with logs)
+just dev
 
-# Run benchmark
-uv run python -m cli.main run \
-  --workflow wf_pr_review_v1 --case-set pr_review_cases_v1 \
-  --agents gpt-4o-mini --agents claude-haiku-4-5
+# In another terminal, run the benchmark
+just demo
 
 # Watch report
 uv run python -m cli.main report {benchmark_id} --watch
 ```
 
+## CI/CD
+
+This project uses [Just](https://just.systems) for task automation and GitHub Actions for CI/CD.
+
+### Continuous Integration
+
+The CI pipeline runs on every pull request and push to main:
+
+- **Secret Scanning**: gitleaks detects potential secrets in the codebase
+- **Quality Gate**: Runs linting, type checking, and unit tests via `just ci-pr`
+
+All quality checks are orchestrated through the justfile, making it easy to run the same checks locally. Run `just ci-pr` to execute the full quality gate before submitting a PR.
+
+### Manual Integration Tests
+
+Integration tests make real API calls to OpenAI and Anthropic (~$0.50-1.00 per run).
+They are triggered manually via the GitHub Actions "Integration" workflow.
+
+To run integration tests via GitHub Actions:
+1. Go to Actions → Integration
+2. Click "Run workflow"
+3. (Optional) Specify a pytest selector
+4. The workflow uses Just recipes to orchestrate services and tests
+
+To run integration tests locally (requires API keys):
+
+```bash
+# Start infrastructure and services
+just init && just services-bg
+
+# Run integration tests (manual only - costs money)
+AGENTBENCH_INTEGRATION_TEST=1 just test-integration
+```
+
+### Reusable Setup Action
+
+The `.github/actions/setup-agentbench` composite action encapsulates the setup logic
+(installing just, Python, uv, caching, syncing dependencies) to ensure consistency
+across workflows.
+
 ## Testing
 
 ### Quick Reference
 
-| Test Type | Command | Duration | Requirements |
-|-----------|---------|----------|--------------|
-| Unit | `uv run pytest tests/unit/ -q` | ~5s | None (all mocked) |
-| Coverage | `uv run pytest tests/unit/ --cov=agentbench` | ~10s | None |
+| Unit | `just test-unit` | ~5s | None (all mocked) |
+| Coverage | `just coverage` | ~10s | None |
+| Full Check | `just check` | ~15s | Lint + Typecheck + Tests |
+| CI Quality Gate | `just ci-pr` | ~20s | Same as CI pipeline |
 
 **Unit Tests**
 
 Mock external dependencies and run in ~5 seconds (330 tests). Coverage spans adapters, storage, orchestration, scoring, API, CLI, and workflow validation.
 
 ```bash
-uv run pytest tests/unit/ -q                    # All unit tests
-uv run pytest tests/unit/ --cov=agentbench       # With coverage report
-uv run pytest tests/unit/test_adapters.py -v     # Single module
+just test-unit                # All unit tests (fast)
+just coverage                 # With coverage report
+just check                    # Full quality gate (lint + typecheck + tests)
+just test tests/unit/test_adapters.py -v  # Single module with verbosity
 ```
 
-**Integration Tests (Manual-Only)**
+**Integration Tests (Manual-Only via GitHub Actions or Local)**
 
-⚠️  **Never run in CI.** These tests make **real API calls** to OpenAI/Anthropic and cost ~$0.50-1.00 per run. Run manually before releases or when validating infrastructure changes.
+⚠️  **Never run in CI automatically.** These tests make **real API calls** to OpenAI/Anthropic and cost ~$0.50-1.00 per run.
 
 Requirements: Docker Compose, `.env` with API keys, gate flag `AGENTBENCH_INTEGRATION_TEST=1`, and running services.
 
 ```bash
-# Start infrastructure and services
-just start && just runtime && just api
+# Start infrastructure and services (background mode)
+just init && just services-bg
+
+# Or use dev mode for foreground with log watching
+# just dev
 
 # Run integration tests (manual only - costs money)
-AGENTBENCH_INTEGRATION_TEST=1 uv run pytest tests/integration/test_pipeline.py -v
-```
+AGENTBENCH_INTEGRATION_TEST=1 just test-integration
 
 Tests validate: multi-agent pipeline completion, single-agent execution, and artifact storage.
 
