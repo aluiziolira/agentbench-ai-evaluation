@@ -73,15 +73,12 @@ jobs:
           test -n "$OPENAI_API_KEY"
           test -n "$ANTHROPIC_API_KEY"
 
-      - name: Seed database
-        run: just seed
-
-      - name: Start background services
-        run: just services-bg
-
-      - name: Run gated integration tests
+      - name: Seed database and run integration tests
         timeout-minutes: 10
-        run: just test-integration "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}"
+        run: |
+          just seed
+          just services-bg
+          just test-integration "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}"
 
       - name: Debug service connectivity on failure
         if: failure()
