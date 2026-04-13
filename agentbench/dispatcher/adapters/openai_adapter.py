@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
+from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessageParam
 
 from agentbench.dispatcher.adapters.base import AgentAdapter
 from agentbench.models.run import EvaluationRun
@@ -62,6 +63,24 @@ class OpenAIAdapter:
 
         self.client = AsyncOpenAI(api_key=api_key)
 
+    def _build_messages(
+        self, conversation_history: list[dict[str, Any]], prompt: str
+    ) -> list[ChatCompletionMessageParam]:
+        """Build typed OpenAI chat messages from conversation history."""
+        messages: list[ChatCompletionMessageParam] = []
+        for msg in conversation_history:
+            role = str(msg.get("role", "user"))
+            content = str(msg.get("content", ""))
+            if role == "assistant":
+                messages.append(
+                    ChatCompletionAssistantMessageParam(role="assistant", content=content)
+                )
+            else:
+                messages.append({"role": "user", "content": content})
+
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
     async def invoke(
         self,
         step: StepDefinition,
@@ -87,8 +106,7 @@ class OpenAIAdapter:
         logger = logging.getLogger(__name__)
 
         # Build messages from conversation history + new prompt
-        messages: list[dict[str, Any]] = list(conversation_history)
-        messages.append({"role": "user", "content": step.input})
+        messages = self._build_messages(conversation_history, step.input)
 
         logger.info(
             f"[OPENAI] Invoking model={self.model}, agent_id={self.agent_id}, prompt_length={len(step.input)}"
@@ -133,7 +151,7 @@ class OpenAIAdapter:
 
     async def _invoke_with_timeout(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[ChatCompletionMessageParam],
         timeout_seconds: float,
     ) -> Any:
         """Make the OpenAI API call with timeout handling.
@@ -159,7 +177,7 @@ class OpenAIAdapter:
         except TimeoutError as e:
             raise TimeoutError(f"OpenAI request timed out after {timeout_seconds}s") from e
 
-    async def _make_api_call(self, messages: list[dict[str, Any]]) -> Any:
+    async def _make_api_call(self, messages: list[ChatCompletionMessageParam]) -> Any:
         """Make the actual OpenAI API call.
 
         Args:

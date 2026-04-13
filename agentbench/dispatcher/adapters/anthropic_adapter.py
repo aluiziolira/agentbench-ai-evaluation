@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from anthropic import AnthropicError, AsyncAnthropic, RateLimitError
+from anthropic.types import MessageParam
 
 from agentbench.dispatcher.adapters.base import AgentAdapter
 from agentbench.models.run import EvaluationRun
@@ -135,7 +136,7 @@ class AnthropicAdapter:
         self,
         conversation_history: list[dict[str, Any]],
         prompt: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[MessageParam]:
         """Build messages list for Anthropic API.
 
         Args:
@@ -145,7 +146,7 @@ class AnthropicAdapter:
         Returns:
             List of message dicts formatted for Anthropic API.
         """
-        messages: list[dict[str, Any]] = []
+        messages: list[MessageParam] = []
 
         # Add conversation history
         for msg in conversation_history:
@@ -166,7 +167,7 @@ class AnthropicAdapter:
 
     async def _invoke_with_timeout(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[MessageParam],
         timeout_seconds: float,
     ) -> Any:
         """Make the Anthropic API call with timeout handling.
@@ -192,7 +193,7 @@ class AnthropicAdapter:
         except TimeoutError as e:
             raise TimeoutError(f"Anthropic request timed out after {timeout_seconds}s") from e
 
-    async def _make_api_call(self, messages: list[dict[str, Any]]) -> Any:
+    async def _make_api_call(self, messages: list[MessageParam]) -> Any:
         """Make the actual Anthropic API call.
 
         Args:

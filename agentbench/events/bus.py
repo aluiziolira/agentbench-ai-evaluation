@@ -5,8 +5,8 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncIterator, Mapping
+from typing import Any, cast
 
 # CRITICAL: Must import redis at module level for exception handling
 import redis.asyncio as redis_module
@@ -20,12 +20,13 @@ from agentbench.events.types import (
 )
 
 logger = logging.getLogger(__name__)
+type RedisField = bytes | bytearray | memoryview[int] | str | int | float
 
 
 class EventBus:
     """Redis Streams event bus for AgentBench."""
 
-    def __init__(self, redis_client) -> None:
+    def __init__(self, redis_client: redis_module.Redis) -> None:
         """Initialize the event bus.
 
         Args:
@@ -58,7 +59,7 @@ class EventBus:
         validate_payload(event.payload)
 
         try:
-            fields = {"data": json.dumps(event.model_dump())}
+            fields: dict[RedisField, RedisField] = {"data": json.dumps(event.model_dump())}
             message_id = await self._redis.xadd(stream, fields, maxlen=max_len, approximate=True)
 
             self._logger.info(
@@ -70,7 +71,7 @@ class EventBus:
                     "message_id": message_id,
                 },
             )
-            return message_id
+            return cast(str, message_id)
         except Exception as e:
             self._logger.error(
                 "Failed to publish event",
@@ -177,15 +178,15 @@ class EventBus:
 
                 await asyncio.sleep(1)
 
-    def _deserialize_event(self, fields: dict[str, Any]) -> EventEnvelope:
+    def _deserialize_event(self, fields: Mapping[str | bytes, Any]) -> EventEnvelope:
         """Deserialize event from Redis stream fields."""
-        if b"data" in fields:
-            data = json.loads(fields[b"data"])
-        elif "data" in fields:
-            data = json.loads(fields["data"])
-        else:
+        raw_data = fields.get("data")
+        if raw_data is None:
+            raw_data = fields.get(b"data")
+        if raw_data is None:
             raise ValueError(f"No 'data' field in message: {fields}")
 
+        data = json.loads(raw_data)
         return EventEnvelope(**data)
 
     async def ack(
@@ -205,7 +206,7 @@ class EventBus:
                     "message_id": message_id,
                 },
             )
-            return result
+            return cast(int, result)
         except Exception as e:
             self._logger.error(
                 "Failed to acknowledge message",

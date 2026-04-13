@@ -1,6 +1,7 @@
 """FastAPI application for AgentBench API."""
 
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,7 +13,7 @@ from agentbench.storage.redis_client import RedisStorage
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     # Initialize storage with environment variables
     mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")

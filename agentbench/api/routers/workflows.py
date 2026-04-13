@@ -1,5 +1,7 @@
 """Workflow API endpoints."""
 
+from typing import cast
+
 from fastapi import APIRouter, HTTPException, Request
 
 from agentbench.models import WorkflowDefinition
@@ -28,7 +30,7 @@ async def get_workflow(workflow_id: str, req: Request) -> WorkflowDefinition:
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
 
-    return workflow
+    return cast(WorkflowDefinition, workflow)
 
 
 @router.post("/{workflow_id}/publish")

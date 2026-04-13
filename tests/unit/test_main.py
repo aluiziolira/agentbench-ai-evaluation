@@ -13,6 +13,10 @@ import pytest
 from agentbench.main import AgentBenchRuntime
 
 
+async def _pending_task() -> None:
+    await asyncio.Event().wait()
+
+
 @pytest.fixture
 def mock_mongo_storage():
     """Create a mock MongoStorage."""
@@ -203,17 +207,15 @@ class TestGracefulShutdown:
         runtime.aggregator = mock_aggregator
 
         # Create mock tasks
-        mock_task1 = AsyncMock()
-        mock_task1.cancel = MagicMock()
-        mock_task2 = AsyncMock()
-        mock_task2.cancel = MagicMock()
+        mock_task1 = asyncio.create_task(_pending_task())
+        mock_task2 = asyncio.create_task(_pending_task())
         runtime._tasks = [mock_task1, mock_task2]
 
         await runtime.stop()
 
         # Verify tasks were cancelled
-        mock_task1.cancel.assert_called_once()
-        mock_task2.cancel.assert_called_once()
+        assert mock_task1.cancelled()
+        assert mock_task2.cancelled()
 
     @pytest.mark.asyncio
     async def test_stop_calls_service_stop_methods(
@@ -233,7 +235,10 @@ class TestGracefulShutdown:
         runtime.aggregator = mock_aggregator
 
         # Create mock tasks
-        runtime._tasks = [AsyncMock(), AsyncMock()]
+        runtime._tasks = [
+            asyncio.create_task(_pending_task()),
+            asyncio.create_task(_pending_task()),
+        ]
 
         await runtime.stop()
 
@@ -349,5 +354,10 @@ class TestErrorHandling:
         # Make one service fail to start
         mock_orchestrator.run = AsyncMock(side_effect=Exception("Start failed"))
 
-        with pytest.raises(Exception, match="Start failed"):
-            await runtime.start()
+        await runtime.start()
+        try:
+            with pytest.raises(Exception, match="Start failed"):
+                await asyncio.gather(*runtime._tasks)
+        finally:
+            runtime._tasks = []
+            await runtime.stop()

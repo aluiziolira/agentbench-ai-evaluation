@@ -1,7 +1,7 @@
 """Benchmark API endpoints."""
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -78,7 +78,7 @@ async def get_benchmark(benchmark_id: str, req: Request) -> dict[str, Any] | Ben
     if report is None:
         raise HTTPException(status_code=404, detail=f"Benchmark not found: {benchmark_id}")
 
-    return report
+    return cast(BenchmarkReport, report)
 
 
 @router.get("/{benchmark_id}/runs")

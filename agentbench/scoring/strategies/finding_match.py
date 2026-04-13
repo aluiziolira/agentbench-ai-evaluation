@@ -420,7 +420,7 @@ class FindingMatchStrategy:
         self,
         agent_findings: list[AgentFinding],
         disallowed_findings: list[DisallowedFinding],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Find agent findings that are in the disallowed list.
 
         Args:
@@ -452,7 +452,7 @@ class FindingMatchStrategy:
     def _find_missed_findings(
         self,
         expected_findings: list[ReviewFindingTruth],
-        matches: list[dict],
+        matches: list[dict[str, Any]],
     ) -> list[str]:
         """Find expected findings that were not matched.
 

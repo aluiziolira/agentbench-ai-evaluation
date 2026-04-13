@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import traceback
+from collections.abc import Coroutine
 from pathlib import Path
 
 import structlog
@@ -61,7 +62,7 @@ logger = structlog.get_logger(__name__)
 class AgentBenchRuntime:
     """Main runtime that wires all services together."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.mongo_storage: MongoStorage | None = None
         self.redis_storage: RedisStorage | None = None
         self.event_bus: EventBus | None = None
@@ -70,7 +71,7 @@ class AgentBenchRuntime:
         self.scoring_engine: ScoringEngine | None = None
         self.aggregator: Aggregator | None = None
         self._shutdown_event = asyncio.Event()
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[object]] = []
 
     async def _signal_handler(self, sig: signal.Signals) -> None:
         """Handle shutdown signals."""
@@ -155,12 +156,21 @@ class AgentBenchRuntime:
         """Start all services."""
         logger.info("Starting AgentBench services...")
 
+        assert self.orchestrator is not None
+        assert self.dispatcher is not None
+        assert self.scoring_engine is not None
+        assert self.aggregator is not None
+
+        service_coroutines: list[tuple[str, Coroutine[object, object, object]]] = [
+            ("orchestrator", self.orchestrator.run()),
+            ("dispatcher", self.dispatcher.run()),
+            ("scoring_engine", self.scoring_engine.run()),
+            ("aggregator", self.aggregator.run()),
+        ]
+
         # Start service tasks
         self._tasks = [
-            asyncio.create_task(self.orchestrator.run(), name="orchestrator"),
-            asyncio.create_task(self.dispatcher.run(), name="dispatcher"),
-            asyncio.create_task(self.scoring_engine.run(), name="scoring_engine"),
-            asyncio.create_task(self.aggregator.run(), name="aggregator"),
+            asyncio.create_task(coroutine, name=name) for name, coroutine in service_coroutines
         ]
 
         logger.info("All services started")

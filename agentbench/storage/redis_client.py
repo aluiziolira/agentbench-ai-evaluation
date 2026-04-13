@@ -1,13 +1,22 @@
 """Redis storage layer for AgentBench FSM and tracking."""
 
+import inspect
 import logging
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, cast
 
 import redis.asyncio as redis
 
 from agentbench.models.run import RunState
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_redis_result[T](result: Awaitable[T] | T) -> T:
+    """Normalize redis-py methods that are typed as sync-or-async unions."""
+    if inspect.isawaitable(result):
+        return await cast(Awaitable[T], result)
+    return result
 
 
 class RedisStorage:
@@ -58,28 +67,28 @@ class RedisStorage:
     async def add_run_to_benchmark(self, benchmark_id: str, run_id: str, ttl: int = 7200) -> None:
         key = f"benchmark:{benchmark_id}:runs"
         client = await self._get_client()
-        await client.sadd(key, run_id)
-        await client.expire(key, ttl)
+        await _resolve_redis_result(client.sadd(key, run_id))
+        await _resolve_redis_result(client.expire(key, ttl))
         logger.debug(f"Added run to benchmark: {benchmark_id} -> {run_id}")
 
     async def get_benchmark_runs(self, benchmark_id: str) -> set[str]:
         key = f"benchmark:{benchmark_id}:runs"
         client = await self._get_client()
-        members = await client.smembers(key)
-        return set(members)
+        members = await _resolve_redis_result(client.smembers(key))
+        return {str(member) for member in members}
 
     async def mark_run_completed(self, benchmark_id: str, run_id: str, ttl: int = 7200) -> None:
         key = f"benchmark:{benchmark_id}:completed"
         client = await self._get_client()
-        await client.sadd(key, run_id)
-        await client.expire(key, ttl)
+        await _resolve_redis_result(client.sadd(key, run_id))
+        await _resolve_redis_result(client.expire(key, ttl))
         logger.debug(f"Marked run completed: {benchmark_id} -> {run_id}")
 
     async def get_benchmark_completed_runs(self, benchmark_id: str) -> set[str]:
         key = f"benchmark:{benchmark_id}:completed"
         client = await self._get_client()
-        members = await client.smembers(key)
-        return set(members)
+        members = await _resolve_redis_result(client.smembers(key))
+        return {str(member) for member in members}
 
     async def is_benchmark_complete(self, benchmark_id: str) -> bool:
         runs = await self.get_benchmark_runs(benchmark_id)
@@ -94,14 +103,16 @@ class RedisStorage:
     ) -> None:
         key = f"workflow:{workflow_id}:{version}"
         client = await self._get_client()
-        await client.hset(key, mapping={k: str(v) for k, v in workflow_data.items()})
-        await client.expire(key, ttl)
+        await _resolve_redis_result(
+            client.hset(key, mapping={k: str(v) for k, v in workflow_data.items()})
+        )
+        await _resolve_redis_result(client.expire(key, ttl))
         logger.debug(f"Cached workflow: {workflow_id}:{version}")
 
     async def get_cached_workflow(self, workflow_id: str, version: str) -> dict[str, Any] | None:
         key = f"workflow:{workflow_id}:{version}"
         client = await self._get_client()
-        data = await client.hgetall(key)
+        data = await _resolve_redis_result(client.hgetall(key))
         if data:
-            return dict(data)
+            return {str(k): v for k, v in data.items()}
         return None

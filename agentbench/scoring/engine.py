@@ -22,7 +22,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from agentbench.cases.loader import load_case
 from agentbench.cases.models import ReviewCaseDefinition
@@ -139,7 +139,10 @@ class ScoringEngine:
 
         try:
             with open(io_file, encoding="utf-8") as f:
-                return json.load(f)
+                raw_data = json.load(f)
+                if not isinstance(raw_data, dict):
+                    raise ValueError(f"Raw I/O file {io_file} must contain a JSON object")
+                return cast(dict[str, Any], raw_data)
         except json.JSONDecodeError as e:
             raise ValueError(f"Malformed JSON in raw I/O file {io_file}: {e}") from e
 
