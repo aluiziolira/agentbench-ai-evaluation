@@ -72,6 +72,9 @@ jobs:
           test -n "$OPENAI_API_KEY"
           test -n "$ANTHROPIC_API_KEY"
 
+      - name: Seed database
+        run: uv run agentbench seed --mongo-uri "$MONGODB_URI"
+
       - name: Start runtime worker
         run: nohup uv run python -m agentbench.main > runtime.log 2>&1 &
 
@@ -89,10 +92,9 @@ jobs:
             sleep 2
           done
           echo "ERROR: API not ready after 60s"
+          cat runtime.log
+          cat api.log
           exit 1
-
-      - name: Seed database
-        run: uv run agentbench seed
 
       - name: Run gated integration tests
         run: uv run pytest "${{ inputs.test_selector || 'tests/integration/test_pipeline.py' }}" -q
