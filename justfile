@@ -68,11 +68,18 @@ test:
 test-unit:
     uv run pytest tests/unit -q
 
-# Integration tests (requires AGENTBENCH_INTEGRATION_TEST=1)
+# Integration tests (loads .env if present; requires AGENTBENCH_INTEGRATION_TEST=1)
 test-integration:
-    @if [ -z "$AGENTBENCH_INTEGRATION_TEST" ]; then \
-        echo "ERROR: set AGENTBENCH_INTEGRATION_TEST=1 to run integration tests"; \
-        exit 1; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f .env ]; then
+        set -a
+        . ./.env
+        set +a
+    fi
+    if [ -z "${AGENTBENCH_INTEGRATION_TEST:-}" ]; then
+        echo "ERROR: set AGENTBENCH_INTEGRATION_TEST=1 to run integration tests"
+        exit 1
     fi
     uv run pytest tests/integration/test_pipeline.py -q
 
@@ -101,6 +108,11 @@ ci-pr: lint typecheck coverage
 test-manual-integration: sync start
     #!/usr/bin/env bash
     set -euo pipefail
+    if [ -f .env ]; then
+        set -a
+        . ./.env
+        set +a
+    fi
     echo "⚠️  WARNING: This will make real API calls costing ~$0.50-1.00"
     echo "Press Ctrl+C to cancel, or wait 3 seconds to continue..."
     sleep 3
@@ -119,4 +131,3 @@ test-manual-integration: sync start
     AGENTBENCH_INTEGRATION_TEST=1 uv run pytest tests/integration/test_pipeline.py -q
 # Pre-commit hook: lint + format + typecheck + unit tests
 precommit: lint format typecheck test-unit
-
