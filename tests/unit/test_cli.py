@@ -23,14 +23,16 @@ def _completed_report_data(*, agents: list[dict]) -> dict:
     # Ensure every agent has all required AgentSummary fields
     full_agents = []
     for a in agents:
-        full_agents.append({
-            "agent_id": a["agent_id"],
-            "avg_score": a["avg_score"],
-            "p50_latency_ms": a["p50_latency_ms"],
-            "p95_latency_ms": a.get("p95_latency_ms", a["p50_latency_ms"] * 3),
-            "failure_rate": a.get("failure_rate", 0.0),
-            "step_breakdown": a.get("step_breakdown", {}),
-        })
+        full_agents.append(
+            {
+                "agent_id": a["agent_id"],
+                "avg_score": a["avg_score"],
+                "p50_latency_ms": a["p50_latency_ms"],
+                "p95_latency_ms": a.get("p95_latency_ms", a["p50_latency_ms"] * 3),
+                "failure_rate": a.get("failure_rate", 0.0),
+                "step_breakdown": a.get("step_breakdown", {}),
+            }
+        )
     return {
         "benchmark_id": "bench-123",
         "workflow_id": "wf_pr_review_v1",
@@ -361,10 +363,12 @@ class TestReportCommand:
     def test_report_shows_completed_benchmark(self, mock_get):
         """Test that report command displays completed benchmark."""
         mock_response = MagicMock()
-        mock_response.json.return_value = _completed_report_data(agents=[
-            {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
-            {"agent_id": "claude-haiku-4-5", "avg_score": 0.82, "p50_latency_ms": 1100},
-        ])
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+                {"agent_id": "claude-haiku-4-5", "avg_score": 0.82, "p50_latency_ms": 1100},
+            ]
+        )
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -414,6 +418,100 @@ class TestReportCommand:
         mock_sleep.assert_called_once_with(5)
 
 
+class TestReportDemoMode:
+    """Tests for explicit report --demo command paths."""
+
+    @patch("cli.reporting_demo.render_full_demo_report")
+    @patch("httpx.get")
+    def test_report_demo_routes_to_demo_renderer(self, mock_get, mock_demo_render):
+        """Test that report --demo uses the demo rendering branch."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        def _render_demo_marker(report, console, show_per_case):
+            console.print(
+                f"DEMO_RENDERED show_per_case={show_per_case} benchmark={report.benchmark_id}"
+            )
+
+        mock_demo_render.side_effect = _render_demo_marker
+
+        result = runner.invoke(app, ["report", "bench-123", "--demo"])
+        assert result.exit_code == 0
+
+        output = _strip_ansi(result.output)
+        assert "Loading demo report for bench-123" in output
+        assert "DEMO_RENDERED show_per_case=True benchmark=bench-123" in output
+        mock_demo_render.assert_called_once()
+
+    @patch("cli.reporting_demo.render_full_demo_report")
+    @patch("httpx.get")
+    def test_report_demo_no_per_case_routes_with_flag(self, mock_get, mock_demo_render):
+        """Test that report --demo --no-per-case passes show_per_case=False."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        def _render_demo_marker(report, console, show_per_case):
+            console.print(
+                f"DEMO_RENDERED show_per_case={show_per_case} benchmark={report.benchmark_id}"
+            )
+
+        mock_demo_render.side_effect = _render_demo_marker
+
+        result = runner.invoke(app, ["report", "bench-123", "--demo", "--no-per-case"])
+        assert result.exit_code == 0
+
+        output = _strip_ansi(result.output)
+        assert "Loading demo report for bench-123" in output
+        assert "DEMO_RENDERED show_per_case=False benchmark=bench-123" in output
+        mock_demo_render.assert_called_once()
+
+    @patch("cli.reporting_demo.render_full_demo_report")
+    @patch("cli.main.time.sleep")
+    @patch("httpx.get")
+    def test_report_demo_watch_waits_then_renders(self, mock_get, mock_sleep, mock_demo_render):
+        """Test demo watch mode polls until complete, then renders demo output."""
+        mock_response_in_progress = MagicMock()
+        mock_response_in_progress.json.return_value = {
+            "benchmark_id": "bench-123",
+            "status": "in_progress",
+        }
+        mock_response_in_progress.raise_for_status = MagicMock()
+
+        mock_response_completed = MagicMock()
+        mock_response_completed.json.return_value = _completed_report_data(agents=[])
+        mock_response_completed.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [mock_response_in_progress, mock_response_completed]
+
+        def _render_demo_marker(report, console, show_per_case):
+            console.print(
+                f"DEMO_RENDERED show_per_case={show_per_case} benchmark={report.benchmark_id}"
+            )
+
+        mock_demo_render.side_effect = _render_demo_marker
+
+        result = runner.invoke(app, ["report", "bench-123", "--watch", "--demo"])
+        assert result.exit_code == 0
+
+        output = _strip_ansi(result.output)
+        assert "Benchmark in progress" in output
+        assert "DEMO_RENDERED show_per_case=True benchmark=bench-123" in output
+        mock_sleep.assert_called_once_with(5)
+        mock_demo_render.assert_called_once()
+
+
 class TestPerCaseFlag:
     """Tests for the --per-case/--no-per-case flag on report command."""
 
@@ -429,9 +527,11 @@ class TestPerCaseFlag:
     def test_default_includes_per_case_sections(self, mock_get):
         """Test default invocation shows per-case sections (per_case=True)."""
         mock_response = MagicMock()
-        mock_response.json.return_value = _completed_report_data(agents=[
-            {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
-        ])
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -446,9 +546,11 @@ class TestPerCaseFlag:
     def test_no_per_case_suppresses_sections(self, mock_get):
         """Test that --no-per-case suppresses per-case sections."""
         mock_response = MagicMock()
-        mock_response.json.return_value = _completed_report_data(agents=[
-            {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
-        ])
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 
@@ -480,6 +582,7 @@ class TestPerCaseFlag:
         assert result.exit_code == 0
         assert "Benchmark Complete" in result.output
         mock_sleep.assert_called_once_with(5)
+
 
 class TestRescoreCommand:
     """Tests for the rescore command."""

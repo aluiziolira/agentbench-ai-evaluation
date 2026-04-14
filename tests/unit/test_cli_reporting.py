@@ -6,6 +6,8 @@ for testing report output without terminal width or color dependencies.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 from rich.console import Console, ConsoleRenderable
 from rich.text import Text
@@ -70,6 +72,14 @@ def render(console: Console, renderable: ConsoleRenderable) -> str:
     with console.capture() as capture:
         console.print(renderable)
     return capture.get()
+
+
+def load_reporting_demo_module():
+    """Import demo reporting module lazily for regression tests."""
+    try:
+        return importlib.import_module("cli.reporting_demo")
+    except Exception as exc:  # pragma: no cover - import failure is test failure
+        pytest.fail(f"Unable to import cli.reporting_demo: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +374,9 @@ def long_names_report() -> BenchmarkReport:
 class TestEdgeCaseRegressions:
     """Comprehensive edge case tests for report rendering."""
 
-    def test_tied_overall_winners(self, tie_winners_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_tied_overall_winners(
+        self, tie_winners_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Multiple agents with identical avg_score both marked as winners."""
         table = render_summary_table(tie_winners_report.agents)
         output = render(fixed_console, table)
@@ -378,7 +390,9 @@ class TestEdgeCaseRegressions:
         gpt_pos = output.find("gpt-4o-mini")
         assert claude_pos < gpt_pos, "Tied agents should be sorted by agent_id"
 
-    def test_tied_per_case_winners(self, tie_winners_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_tied_per_case_winners(
+        self, tie_winners_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Multiple agents with identical case score both marked as winners in topic table."""
         tables = render_per_topic_tables(tie_winners_report, 80)
         # Both cases have tied scores (0.85 each)
@@ -390,7 +404,9 @@ class TestEdgeCaseRegressions:
             # The em dash should NOT appear since both have scores
             assert "\u2014" not in output, "No missing scores in tied case"
 
-    def test_single_agent_report(self, single_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_single_agent_report(
+        self, single_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Only one agent in report - comprehensive validation."""
         # Test summary table
         summary_table = render_summary_table(single_agent_report.agents)
@@ -425,7 +441,9 @@ class TestEdgeCaseRegressions:
         assert insights["overall_leader"] == {"claude-haiku-4-5"}
         assert insights["biggest_spread"] is None  # No spread with single agent
 
-    def test_sparse_agent_case_matrix(self, sparse_scores_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_sparse_agent_case_matrix(
+        self, sparse_scores_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Missing agent scores for some cases render as em dash."""
         tables = render_per_topic_tables(sparse_scores_report, 80)
 
@@ -444,7 +462,9 @@ class TestEdgeCaseRegressions:
         # Verify claude's score is present
         assert "0.70" in output, "Present scores should be visible"
 
-    def test_long_case_and_agent_ids(self, long_names_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_long_case_and_agent_ids(
+        self, long_names_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Long identifiers handled without crashing (truncation/wrapping)."""
         # Test summary table with long agent IDs
         summary_table = render_summary_table(long_names_report.agents)
@@ -471,7 +491,9 @@ class TestEdgeCaseRegressions:
         assert "anthropic-claude-3-5" in step_output
         assert "openai-gpt-4o-mini" in step_output
 
-    def test_non_identical_step_breakdown(self, non_identical_steps_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_non_identical_step_breakdown(
+        self, non_identical_steps_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Agents with different step sets - missing steps render as em dash."""
         table = render_step_breakdown(non_identical_steps_report.agents)
         output = render(fixed_console, table)
@@ -545,7 +567,6 @@ def non_identical_steps_report() -> BenchmarkReport:
             "pr_002_missing_test_coverage": "Testing",
         },
     )
-
 
 
 # ---------------------------------------------------------------------------
@@ -635,7 +656,8 @@ class TestGroupCasesByTopic:
     def test_groups_correctly(self, two_agent_report: BenchmarkReport) -> None:
         """Cases grouped under their canonical topics."""
         groups = group_cases_by_topic(
-            two_agent_report.per_case_scores, two_agent_report.per_case_topics,
+            two_agent_report.per_case_scores,
+            two_agent_report.per_case_topics,
         )
         assert "Auth/Security" in groups
         assert "Testing" in groups
@@ -801,7 +823,9 @@ class TestComputeInsights:
 class TestRenderSummaryTable:
     """Tests for render_summary_table."""
 
-    def test_renders_agents_ordered(self, two_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_renders_agents_ordered(
+        self, two_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Summary table renders agents ordered by score."""
         table = render_summary_table(two_agent_report.agents)
         output = render(fixed_console, table)
@@ -810,7 +834,9 @@ class TestRenderSummaryTable:
         gpt_pos = output.find("gpt-4o-mini")
         assert claude_pos < gpt_pos
 
-    def test_single_agent(self, single_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_single_agent(
+        self, single_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Summary table works with a single agent."""
         table = render_summary_table(single_agent_report.agents)
         output = render(fixed_console, table)
@@ -847,7 +873,9 @@ class TestRenderPerTopicTables:
         assert titles[1] == "Topic: Null Safety"
         assert titles[2] == "Topic: Testing"
 
-    def test_single_agent_columns(self, single_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_single_agent_columns(
+        self, single_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Per-topic tables work with a single agent."""
         tables = render_per_topic_tables(single_agent_report, 80)
         assert len(tables) == 2
@@ -855,7 +883,9 @@ class TestRenderPerTopicTables:
             output = render(fixed_console, t)
             assert "claude-haiku-4-5" in output
 
-    def test_em_dash_for_missing_score(self, sparse_scores_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_em_dash_for_missing_score(
+        self, sparse_scores_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Missing scores render as em dash."""
         tables = render_per_topic_tables(sparse_scores_report, 80)
         # pr_002 has only claude, gpt is missing -> should show em dash
@@ -875,14 +905,18 @@ class TestRenderPerTopicTables:
 class TestRenderStepBreakdown:
     """Tests for render_step_breakdown."""
 
-    def test_renders_all_steps(self, two_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_renders_all_steps(
+        self, two_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Step breakdown shows all steps."""
         table = render_step_breakdown(two_agent_report.agents)
         output = render(fixed_console, table)
         assert "s1_findings" in output
         assert "s2_review_summary" in output
 
-    def test_shows_agent_scores(self, two_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_shows_agent_scores(
+        self, two_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Step breakdown shows agent scores per step."""
         table = render_step_breakdown(two_agent_report.agents)
         output = render(fixed_console, table)
@@ -890,7 +924,9 @@ class TestRenderStepBreakdown:
         assert "0.88" in output
         assert "0.94" in output
 
-    def test_single_agent(self, single_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_single_agent(
+        self, single_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Step breakdown works with single agent."""
         table = render_step_breakdown(single_agent_report.agents)
         output = render(fixed_console, table)
@@ -905,7 +941,9 @@ class TestRenderStepBreakdown:
 class TestRenderInsights:
     """Tests for render_insights."""
 
-    def test_renders_overall_leader(self, two_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_renders_overall_leader(
+        self, two_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Insights panel shows overall leader."""
         insights = compute_insights(
             two_agent_report.agents,
@@ -916,7 +954,9 @@ class TestRenderInsights:
         assert "Overall Leader" in rendered
         assert "claude-haiku-4-5" in rendered
 
-    def test_renders_biggest_spread(self, two_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_renders_biggest_spread(
+        self, two_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Insights panel shows biggest spread."""
         insights = compute_insights(
             two_agent_report.agents,
@@ -927,7 +967,9 @@ class TestRenderInsights:
         assert "Biggest Spread" in rendered
         assert "0.16" in rendered
 
-    def test_renders_topic_leaders(self, two_agent_report: BenchmarkReport, fixed_console: Console) -> None:
+    def test_renders_topic_leaders(
+        self, two_agent_report: BenchmarkReport, fixed_console: Console
+    ) -> None:
         """Insights panel shows per-topic leaders."""
         insights = compute_insights(
             two_agent_report.agents,
@@ -938,3 +980,63 @@ class TestRenderInsights:
         assert "Auth/Security" in rendered
         assert "Testing" in rendered
         assert "Null Safety" in rendered
+
+
+class TestDemoRendererRegressions:
+    """Regression tests for demo-mode report rendering."""
+
+    def test_render_executive_summary_renders_without_rich_text_table_crash(
+        self,
+        two_agent_report: BenchmarkReport,
+        fixed_console: Console,
+    ) -> None:
+        """Executive summary render path should not crash on Rich composition."""
+        demo = load_reporting_demo_module()
+        summary = demo.render_executive_summary(
+            two_agent_report.agents,
+            two_agent_report.case_count,
+        )
+
+        try:
+            output = render(fixed_console, summary)
+        except Exception as exc:  # pragma: no cover - this is the regression signal
+            pytest.fail(f"render_executive_summary raised unexpectedly: {exc}")
+
+        assert "Executive Summary" in output
+        assert "Leading Agent:" in output
+        assert "claude-haiku-4-5" in output
+        assert "Agents Evaluated" in output
+        assert "Test Cases" in output
+
+    def test_render_full_demo_report_includes_expected_sections(
+        self,
+        two_agent_report: BenchmarkReport,
+        fixed_console: Console,
+    ) -> None:
+        """Full demo rendering should complete and include key section markers."""
+        demo = load_reporting_demo_module()
+        try:
+            with fixed_console.capture() as capture:
+                demo.render_full_demo_report(
+                    two_agent_report,
+                    fixed_console,
+                    show_per_case=True,
+                )
+        except Exception as exc:  # pragma: no cover - this is the regression signal
+            pytest.fail(f"render_full_demo_report raised unexpectedly: {exc}")
+
+        output = capture.get()
+        section_markers = [
+            "Executive Summary",
+            "Agent Performance Leaderboard",
+            "Topic Performance Overview",
+            "Auth/Security",
+            "Step-Level Analysis",
+            "Key Insights",
+            "AgentBench v0.1.0",
+        ]
+        for marker in section_markers:
+            assert marker in output
+
+        positions = [output.find(marker) for marker in section_markers]
+        assert positions == sorted(positions)
