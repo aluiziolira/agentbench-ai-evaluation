@@ -402,6 +402,8 @@ class Orchestrator:
             await self.redis_storage.set_run_state(run_id, RunState.FAILED)
             # Update MongoDB state
             await self.mongo_storage.update_run_state(run_id, RunState.FAILED)
+            # Mark run as completed in Redis so benchmark completion check works
+            await self.redis_storage.mark_run_completed(run.benchmark_id, run_id)
 
         # Publish evaluation.run.failed event
         await self.event_bus.publish(

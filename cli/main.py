@@ -91,6 +91,11 @@ def report(
     else:
         console.print(f"[bold blue]Fetching report for {benchmark_id}...[/]")
 
+    # Watch mode timeout tracking
+    start_time = time.time()
+    max_duration = 600  # 10 minute default timeout
+    poll_interval = 5
+
     while True:
         try:
             response = httpx.get(
@@ -101,11 +106,24 @@ def report(
             result = response.json()
 
             if result.get("status") == "in_progress":
+                elapsed = time.time() - start_time
+                if elapsed > max_duration:
+                    console.print(
+                        f"[bold red]Timeout: Benchmark did not complete within {max_duration}s[/]"
+                    )
+                    console.print(
+                        "[yellow]The benchmark may still be running. Check service logs with:[/]"
+                    )
+                    console.print("  just logs")
+                    console.print("[yellow]Or check benchmark status manually:[/]")
+                    console.print(f"  uv run python -m cli.main report {benchmark_id}")
+                    raise typer.Exit(1)
+
                 console.print("[yellow]Benchmark in progress...[/]")
                 if not watch:
                     console.print("Use --watch to wait for completion")
                     break
-                time.sleep(5)
+                time.sleep(poll_interval)
                 continue
 
             # Use demo-optimized rendering if --demo flag is set
