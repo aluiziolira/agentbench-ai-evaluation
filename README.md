@@ -231,9 +231,29 @@ just dev
 # In another terminal, run the benchmark
 just demo
 
-# Watch report
-uv run python -m cli.main report {benchmark_id} --watch
+# Watch report with demo mode (enhanced visuals for presentations)
+uv run python -m cli.main report {benchmark_id} --watch --demo
 ```
+
+## Demo Mode
+
+The CLI includes an enhanced **demo mode** with professional visuals for hiring showcases and presentations:
+
+- 🏆 Medal rankings (🥇🥈🥉) and trophy highlights for winners
+- 📊 Visual progress bars for scores and latency metrics
+- 🎨 Color-coded performance (green ≥0.9, yellow ≥0.8, red <0.7)
+- 🎯 Topic icons (🛡 Auth, 🧪 Testing, 🔒 Null Safety, etc.)
+- 📈 Executive summary with performance grading
+- ⭐ Enhanced insights panel with visual hierarchy
+
+```bash
+# View completed benchmark with demo visuals
+uv run python -m cli.main report {benchmark_id} --demo
+
+# Static report without per-case breakdown (concise)
+uv run python -m cli.main report {benchmark_id} --demo --no-per-case
+```
+
 
 ## CI/CD
 

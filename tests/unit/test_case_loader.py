@@ -769,7 +769,9 @@ class TestResolveCaseTopic:
         assert resolve_case_topic(["validation", "input-sanitization"]) == "Input Validation"
 
     def test_pr_008_database_n1(self) -> None:
-        assert resolve_case_topic(["performance", "database", "n+1", "optimization"]) == "Database/N+1"
+        assert (
+            resolve_case_topic(["performance", "database", "n+1", "optimization"]) == "Database/N+1"
+        )
 
     def test_unknown_tags_returns_other(self) -> None:
         assert resolve_case_topic(["foo", "bar"]) == "Other"
