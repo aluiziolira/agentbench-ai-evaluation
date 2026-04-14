@@ -67,12 +67,29 @@ def report(
     benchmark_id: str = typer.Argument(..., help="Benchmark ID"),
     watch: bool = typer.Option(False, "--watch", "-w", help="Watch for completion"),
     per_case: bool = typer.Option(True, "--per-case/--no-per-case", help="Show per-case breakdown"),
+    demo: bool = typer.Option(
+        False, "--demo", "-d", help="Demo mode - enhanced visuals for presentations"
+    ),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
 ) -> None:
-    """Get benchmark report."""
+    """Get benchmark report.
+
+    Examples:
+        # Standard report
+        uv run python -m cli.main report {benchmark_id}
+
+        # Demo mode for presentations (enhanced visuals)
+        uv run python -m cli.main report {benchmark_id} --demo
+
+        # Watch mode with demo visuals
+        uv run python -m cli.main report {benchmark_id} --watch --demo
+    """
     import httpx
 
-    console.print(f"[bold blue]Fetching report for {benchmark_id}...[/]")
+    if demo:
+        console.print(f"[bold bright_blue]🚀 Loading demo report for {benchmark_id}...[/]")
+    else:
+        console.print(f"[bold blue]Fetching report for {benchmark_id}...[/]")
 
     while True:
         try:
@@ -91,35 +108,61 @@ def report(
                 time.sleep(5)
                 continue
 
-            # Display report
-            console.print("[bold green]Benchmark Complete![/]")
-            console.print(f"Workflow: {result.get('workflow_id')}")
-            console.print(f"Case Count: {result.get('case_count')}")
+            # Use demo-optimized rendering if --demo flag is set
+            if demo:
+                report = BenchmarkReport.model_validate(result)
+                try:
+                    from cli.reporting_demo import render_full_demo_report
 
-            report = BenchmarkReport.model_validate(result)
+                    render_full_demo_report(report, console, show_per_case=per_case)
+                except Exception as demo_exc:
+                    console.print(
+                        f"[yellow]Demo renderer unavailable ({demo_exc}), falling back to standard report.[/]"
+                    )
+                    console.print("[bold green]Benchmark Complete![/]")
+                    console.print(f"Workflow: {result.get('workflow_id')}")
+                    console.print(f"Case Count: {result.get('case_count')}")
+                    if report.agents:
+                        console.print(render_summary_table(report.agents))
+                    if per_case:
+                        topic_tables = render_per_topic_tables(report, console.width)
+                        for tbl in topic_tables:
+                            console.print(tbl)
+                        console.print(render_step_breakdown(report.agents))
+                        insights = compute_insights(
+                            report.agents, report.per_case_scores, report.per_case_topics
+                        )
+                        console.print(render_insights(insights))
+            else:
+                # Standard rendering (legacy mode)
+                console.print("[bold green]Benchmark Complete![/]")
+                console.print(f"Workflow: {result.get('workflow_id')}")
+                console.print(f"Case Count: {result.get('case_count')}")
 
-            # Agent summaries (always shown)
-            if report.agents:
-                console.print(render_summary_table(report.agents))
+                report = BenchmarkReport.model_validate(result)
 
-            # Per-case sections (only when --per-case)
-            if per_case:
-                topic_tables = render_per_topic_tables(report, console.width)
-                for tbl in topic_tables:
-                    console.print(tbl)
+                # Agent summaries (always shown)
+                if report.agents:
+                    console.print(render_summary_table(report.agents))
 
-                console.print(render_step_breakdown(report.agents))
+                # Per-case sections (only when --per-case)
+                if per_case:
+                    topic_tables = render_per_topic_tables(report, console.width)
+                    for tbl in topic_tables:
+                        console.print(tbl)
 
-                insights = compute_insights(
-                    report.agents, report.per_case_scores, report.per_case_topics
-                )
-                console.print(render_insights(insights))
+                    console.print(render_step_breakdown(report.agents))
+
+                    insights = compute_insights(
+                        report.agents, report.per_case_scores, report.per_case_topics
+                    )
+                    console.print(render_insights(insights))
 
             break
 
         except Exception as e:
             console.print(f"[bold red]Error: {e}[/]")
-        raise typer.Exit(1) from None
+            raise typer.Exit(1) from None
 
 
 @app.command()
