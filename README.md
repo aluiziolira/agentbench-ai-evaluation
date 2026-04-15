@@ -6,9 +6,8 @@ A minimal AI agent evaluation framework for PR review behavior, built with event
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml/badge.svg)](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml)
 
-## Project Title
 
-AgentBench is an evaluation framework that runs AI agents against seeded PR review cases, scores their findings through deterministic matching, and produces comparative benchmark reports.
+AgentBench runs AI agents against seeded PR review cases, scores their findings through deterministic matching, and produces comparative benchmark reports.
 
 - Event-driven orchestration coordinates dispatch, scoring, and reporting through Redis Streams
 - Deterministic finding-match scoring produces reproducible results without stochastic resampling
@@ -239,25 +238,16 @@ just demo
 # just demo-quick
 ```
 
-## Demo Mode
+The CLI includes an enhanced demo mode with visual highlights for performance grading, score progress bars, and latency metrics.
 
-The CLI includes an enhanced **demo mode** with professional visuals for hiring showcases and presentations:
-
-- 🏆 Medal rankings (🥇🥈🥉) and trophy highlights for winners
-- 📊 Visual progress bars for scores and latency metrics
-- 🎨 Color-coded performance (green ≥0.9, yellow ≥0.8, red <0.7)
-- 🎯 Topic icons (🛡 Auth, 🧪 Testing, 🔒 Null Safety, etc.)
-- 📈 Executive summary with performance grading
-- ⭐ Enhanced insights panel with visual hierarchy
-
-The `just demo` command runs the full benchmark with both agents and displays the enhanced report automatically:
+The `just demo` command runs a full benchmark with two agents and displays the report automatically:
 
 ```bash
-just demo        # Full demo (~3 min, 2 agents, 8 cases)
-just demo-quick  # Quick demo (~1.5 min, 1 agent, 8 cases)
+just demo        # Full benchmark (~3 min, 2 agents, 8 cases)
+just demo-quick  # Fast run (~1.5 min, 1 agent, 8 cases)
 ```
 
-For viewing existing benchmarks:
+View existing benchmarks with:
 
 ```bash
 # View completed benchmark with demo visuals
@@ -266,7 +256,6 @@ uv run python -m cli.main report {benchmark_id} --demo
 # Static report without per-case breakdown (concise)
 uv run python -m cli.main report {benchmark_id} --demo --no-per-case
 ```
-
 
 ## CI/CD
 
