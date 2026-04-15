@@ -416,6 +416,29 @@ class TestWorkflowCompletion:
         assert envelope.payload["run_id"] == sample_run.run_id
         assert envelope.payload["benchmark_id"] == sample_run.benchmark_id
 
+    @pytest.mark.asyncio
+    async def test_complete_run_emits_benchmark_completed_when_all_done(
+        self, orchestrator, mock_event_bus, mock_redis_storage, sample_workflow, sample_run
+    ):
+        """Test that benchmark completion event is benchmark-scoped (no run_id)."""
+        mock_redis_storage.is_benchmark_complete.return_value = True
+
+        await orchestrator._complete_run(sample_run, sample_workflow)
+
+        # Find the EVALUATION_RUN_COMPLETED event
+        publish_calls = mock_event_bus.publish.call_args_list
+        completed_calls = [
+            c for c in publish_calls if c[0][1].event_type == "evaluation.run.completed"
+        ]
+        assert len(completed_calls) == 1
+
+        stream, envelope = completed_calls[0][0]
+        assert stream == "stream:eval-runs"
+        assert envelope.correlation_id == sample_run.benchmark_id
+        # Benchmark-level event should NOT contain run_id (would fail bus validation)
+        assert "run_id" not in envelope.payload
+        assert envelope.payload["benchmark_id"] == sample_run.benchmark_id
+
 
 # ============================================================================
 # Benchmark Expansion Tests

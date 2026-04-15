@@ -372,7 +372,6 @@ class Orchestrator:
                     correlation_id=run.benchmark_id,
                     payload={
                         "benchmark_id": run.benchmark_id,
-                        "run_id": run.run_id,
                     },
                 ),
             )
