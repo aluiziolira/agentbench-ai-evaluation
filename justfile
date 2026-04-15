@@ -339,17 +339,17 @@ test-manual: sync start services-bg
 # DEMO (Hiring Showcase)
 # ═════════════════════════════════════════════════════════════════════════════
 
-# Run demo benchmark with automatic report watching
+# Run demo benchmark (all agents, watch + demo mode)
 [group('demo')]
 demo:
-    @just _status "Starting demo benchmark with auto-watch..."
-    @bash scripts/demo-watch.sh
+    @just _status "Starting demo benchmark..."
+    @uv run python -m cli.main run --watch --demo
 
-# Run quick demo (4 cases, single agent for faster results)
+# Run quick demo (single agent for faster results)
 [group('demo')]
 demo-quick:
-    @just _status "Starting quick demo (4 cases, single agent)..."
-    @bash scripts/demo-watch.sh quick
+    @just _status "Starting quick demo (single agent)..."
+    @uv run python -m cli.main run --agents gpt-4o-mini --watch --demo
 
 # MAINTENANCE
 # ═════════════════════════════════════════════════════════════════════════════

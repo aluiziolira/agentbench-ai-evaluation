@@ -31,6 +31,8 @@ def run(
     agents: list[str] = typer.Option(  # noqa: B008
         ["gpt-4o-mini", "claude-haiku-4-5"], "--agents", "-a", help="Agent IDs"
     ),
+    watch: bool = typer.Option(False, "--watch", help="Watch for completion and show report"),
+    demo: bool = typer.Option(False, "--demo", help="Demo mode - enhanced visuals"),
     api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
 ) -> None:
     import uuid
@@ -56,10 +58,15 @@ def run(
         )
         response.raise_for_status()
         result = response.json()
-        console.print(f"[bold green]Benchmark started: {result['benchmark_id']}[/]")
+        benchmark_id = result["benchmark_id"]
+        console.print(f"[bold green]Benchmark started: {benchmark_id}[/]")
     except Exception as e:
         console.print(f"[bold red]Error: {e}[/]")
         raise typer.Exit(1) from None
+
+    if watch:
+        # Delegate to report with watch + demo flags
+        report(benchmark_id=benchmark_id, watch=True, demo=demo, api_url=api_url)
 
 
 @app.command()
