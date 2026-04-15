@@ -27,9 +27,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
-    # Cleanup
-    pass
-
 
 app = FastAPI(
     title="AgentBench API",

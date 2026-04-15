@@ -4,7 +4,7 @@ This module provides the Orchestrator class that manages evaluation runs,
 step progression, and FSM state. It coordinates with other services through
 the event bus.
 
-Per spec Section 9.2:
+Service contract:
 - Consumes: stream:eval-runs (evaluation.run.requested, step.scored)
 - Publishes: stream:eval-runs (evaluation.run.started, evaluation.run.completed,
                               evaluation.run.failed),
@@ -53,7 +53,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Fixtures directory for case loading
 DEFAULT_FIXTURES_DIR = Path("fixtures/pr_review")
 
 
@@ -146,17 +145,11 @@ class Orchestrator:
 
         step = workflow.steps[step_index]
 
-        # Update FSM state in Redis
         await self.redis_storage.set_current_step(run.run_id, step_index)
         await self.redis_storage.set_run_state(run.run_id, RunState.STEP_IN_PROGRESS)
 
-        # Update run state in MongoDB
         await self.mongo_storage.update_run_state(run.run_id, RunState.STEP_IN_PROGRESS, step_index)
 
-        # Publish step dispatched event
-        logger.info(
-            f"[ORCHESTRATOR] Publishing WORKFLOW_STEP_DISPATCHED: run_id={run.run_id}, step_id={step.step_id}, step_index={step_index}"
-        )
         await self.event_bus.publish(
             STREAM_EVAL_STEPS,
             EventEnvelope(
@@ -172,7 +165,7 @@ class Orchestrator:
             ),
         )
         logger.info(
-            "[ORCHESTRATOR] Successfully dispatched step %s for run %s",
+            "Dispatched step %s for run %s",
             step.step_id,
             run.run_id,
             extra={
@@ -199,12 +192,10 @@ class Orchestrator:
         case_set_id = payload["case_set_id"]
         agents = payload["agents"]
 
-        # Get workflow
         workflow = await self.mongo_storage.get_workflow(workflow_id)
         if workflow is None:
             raise ValueError(f"Workflow not found: {workflow_id}")
 
-        # Load enabled cases from the case set
         try:
             cases = load_case_set(case_set_id, self.fixtures_dir)
         except FileNotFoundError as e:
@@ -232,7 +223,6 @@ class Orchestrator:
             extra={"correlation_id": benchmark_id},
         )
 
-        # Create runs for each (agent, case) combination
         for agent_id in agents:
             for case in cases:
                 run = await self._create_run(
@@ -243,11 +233,9 @@ class Orchestrator:
                     agent_id=agent_id,
                 )
 
-                # Set FSM state to STARTED
                 await self.redis_storage.set_run_state(run.run_id, RunState.STARTED)
                 await self.mongo_storage.update_run_state(run.run_id, RunState.STARTED)
 
-                # Publish run started event
                 await self.event_bus.publish(
                     STREAM_EVAL_RUNS,
                     EventEnvelope(
@@ -264,10 +252,8 @@ class Orchestrator:
                     ),
                 )
 
-                # Dispatch step 0
                 await self._dispatch_step(run, 0)
 
-        # Publish benchmark-level run started event
         await self.event_bus.publish(
             STREAM_EVAL_RUNS,
             EventEnvelope(
@@ -304,7 +290,6 @@ class Orchestrator:
             logger.error("Run not found: %s", run_id, extra={"correlation_id": run_id})
             return
 
-        # Get workflow
         workflow = await self.mongo_storage.get_workflow(run.workflow_id, run.workflow_version)
         if workflow is None:
             logger.error(
@@ -312,23 +297,18 @@ class Orchestrator:
                 run.workflow_id,
                 extra={"correlation_id": run_id},
             )
-            # Mark run as failed
             await self._fail_run(run_id, f"Workflow not found: {run.workflow_id}")
             return
 
-        # Get current step from Redis
         current_step = await self.redis_storage.get_current_step(run_id) or 0
         next_step = current_step + 1
 
         if next_step >= len(workflow.steps):
-            # All steps completed - emit workflow.completed
             await self._complete_run(run, workflow)
         else:
-            # Update step state in MongoDB
             await self.mongo_storage.update_run_state(
                 run.run_id, RunState.STEP_SCORED, current_step
             )
-            # Dispatch next step
             await self._dispatch_step(run, next_step)
 
     async def _complete_run(self, run: EvaluationRun, workflow: WorkflowDefinition) -> None:
@@ -338,14 +318,11 @@ class Orchestrator:
             run: The evaluation run to complete.
             workflow: The workflow definition.
         """
-        # Update FSM state
         await self.redis_storage.set_run_state(run.run_id, RunState.COMPLETED)
         await self.redis_storage.mark_run_completed(run.benchmark_id, run.run_id)
 
-        # Update MongoDB state
         await self.mongo_storage.update_run_state(run.run_id, RunState.COMPLETED)
 
-        # Publish workflow.completed event to stream:scores per spec
         await self.event_bus.publish(
             STREAM_SCORES,
             EventEnvelope(
@@ -360,9 +337,7 @@ class Orchestrator:
             ),
         )
 
-        # Check if all runs in benchmark are complete
         if await self.redis_storage.is_benchmark_complete(run.benchmark_id):
-            # Publish evaluation.run.completed for the benchmark
             await self.event_bus.publish(
                 STREAM_EVAL_RUNS,
                 EventEnvelope(
@@ -397,14 +372,10 @@ class Orchestrator:
         """
         run = await self.mongo_storage.get_run(run_id)
         if run:
-            # Update FSM state
             await self.redis_storage.set_run_state(run_id, RunState.FAILED)
-            # Update MongoDB state
             await self.mongo_storage.update_run_state(run_id, RunState.FAILED)
-            # Mark run as completed in Redis so benchmark completion check works
             await self.redis_storage.mark_run_completed(run.benchmark_id, run_id)
 
-        # Publish evaluation.run.failed event
         await self.event_bus.publish(
             STREAM_EVAL_RUNS,
             EventEnvelope(
@@ -473,7 +444,6 @@ class Orchestrator:
                             f"Error processing event: {str(e)}",
                         )
 
-                # Acknowledge the message
                 message_id = envelope.__dict__.get("_message_id")
                 if message_id:
                     await self.event_bus.ack(
@@ -523,7 +493,6 @@ class Orchestrator:
                             f"Error processing event: {str(e)}",
                         )
 
-                # Acknowledge the message
                 message_id = envelope.__dict__.get("_message_id")
                 if message_id:
                     await self.event_bus.ack(

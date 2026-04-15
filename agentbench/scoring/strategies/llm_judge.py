@@ -15,10 +15,10 @@ from agentbench.models.workflow import StepDefinition
 
 logger = logging.getLogger(__name__)
 
-# Default judge model as per spec Section 12.2 - STATIC/FIXED for evaluation independence
+# Default judge model kept fixed for evaluation independence
 DEFAULT_JUDGE_MODEL = "gpt-5.4-mini"
 
-# Judge prompt template with rubric dimensions from spec Section 12.2
+# Judge prompt template with rubric dimensions
 JUDGE_PROMPT_TEMPLATE = """You are evaluating a PR review summary. Rate it on these dimensions (0.0-1.0 each):
 1. Prioritizes most important issue first
 2. Grounded in actual diff and ticket
@@ -132,8 +132,6 @@ class LLMJudgeStrategy:
         Raises:
             ValueError: If response cannot be parsed for a valid score.
         """
-        # Try to extract JSON from the response
-        # Look for JSON block in markdown code blocks or raw JSON
         json_patterns = [
             r"```json\s*(\{.*?\})\s*```",  # Markdown JSON block
             r"```\s*(\{.*?\})\s*```",  # Generic code block with JSON
@@ -147,33 +145,26 @@ class LLMJudgeStrategy:
                 json_str = match.group(1)
                 break
 
-        # If no JSON block found, try the whole response
         if json_str is None:
             json_str = response_text.strip()
 
-        # Try to parse JSON
         try:
             data = json.loads(json_str)
             if "score" in data:
                 score = float(data["score"])
                 reasoning = data.get("reasoning", "No reasoning provided")
-                # Handle scores that might be 0-100 instead of 0.0-1.0
-                # Only normalize if score is clearly in 0-100 range (> 10)
                 if score > 10.0 and score <= 100.0:
                     score = score / 100.0
-                # Clamp score to valid range
                 score = max(0.0, min(1.0, score))
                 return score, reasoning
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
 
-        # Fallback: Try to extract just a numeric score (0.0-1.0)
         score_pattern = r"(?:score|rating)[\s:=]+(\d+\.?\d*)"
         match = re.search(score_pattern, response_text, re.IGNORECASE)
         if match:
             try:
                 score = float(match.group(1))
-                # Handle scores that might be 0-100 instead of 0.0-1.0
                 if score > 1.0 and score <= 100.0:
                     score = score / 100.0
                 score = max(0.0, min(1.0, score))
@@ -233,18 +224,14 @@ class LLMJudgeStrategy:
             If the judge response cannot be parsed, returns a neutral score
             of 0.5 with an explanation in the details.
         """
-        # Build the judge prompt
         judge_prompt = self._build_judge_prompt(response_text, case)
 
-        # Invoke the judge (async)
         judge_response = await self._invoke_judge(judge_prompt)
 
-        # Parse the judge response
         try:
             score, reasoning = self._parse_judge_response(judge_response)
             parse_failed = False
         except ValueError as e:
-            # Parse failure: return neutral score with explanation
             logger.warning(
                 "LLM judge parse failure for run_id=%s, case_id=%s: %s",
                 run_id,
@@ -255,11 +242,9 @@ class LLMJudgeStrategy:
             reasoning = f"Parse failure fallback: {str(e)}"
             parse_failed = True
 
-        # Calculate weighted score
         weight = step.scoring.weight if step.scoring else 1.0
         weighted_score = score * weight
 
-        # Determine pass/fail (threshold at 0.5)
         passed = score >= 0.5
 
         return StepScore(

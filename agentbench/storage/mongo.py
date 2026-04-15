@@ -66,7 +66,7 @@ class MongoStorage:
     async def setup_indexes(self) -> None:
         """Create all required MongoDB indexes.
 
-        Creates indexes as specified in spec Section 13:
+        Creates indexes:
         - workflows: unique index on (workflow_id, version)
         - runs: unique on run_id, index on benchmark_id, index on (case_set_id, case_id)
         - run_reports: unique on run_id, index on benchmark_id, index on case_id

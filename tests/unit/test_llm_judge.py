@@ -79,7 +79,7 @@ class TestJudgePrompt:
         strategy = LLMJudgeStrategy()
         prompt = strategy._build_judge_prompt("Summary text", sample_case)
 
-        # Check all 5 required dimensions from spec Section 12.2
+        # Check all 5 required dimensions
         assert "Prioritizes most important issue first" in prompt
         assert "Grounded in actual diff and ticket" in prompt
         assert "Mentions missing tests when relevant" in prompt

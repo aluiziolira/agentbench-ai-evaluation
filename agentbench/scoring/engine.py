@@ -7,7 +7,7 @@ This module provides the ScoringEngine class that:
 - Computes StepScore using the appropriate strategy
 - Emits step.scored events to stream:scores
 
-Service Contract (spec Section 9.4):
+Service contract:
 - Consumes: stream:eval-steps (agent.response.received)
 - Publishes: stream:scores (step.scored)
 - Behavior:
@@ -116,7 +116,7 @@ class ScoringEngine:
     def _load_raw_io(self, run_id: str, step_id: str) -> dict[str, Any]:
         """Load raw I/O data from filesystem.
 
-        File format per spec Section 13:
+        File format:
         - Path: data/raw_io/{run_id}/{step_id}.json
         - Contents: run_id, case_set_id, case_id, step_id, agent_id,
                     request, response, latency_ms, timestamp
@@ -168,10 +168,8 @@ class ScoringEngine:
         Returns:
             StepScore containing the computed score and metadata.
         """
-        # Resolve strategy
         strategy = self._resolve_strategy(step.scoring.strategy)
 
-        # Score (await async strategy score method)
         score = await strategy.score(step, response_text, run_id, latency_ms, case)
 
         logger.info(
@@ -213,7 +211,6 @@ class ScoringEngine:
             )
             return None
 
-        # Load run from MongoDB
         run = await self.mongo_storage.get_run(run_id)
         if run is None:
             logger.error(
@@ -225,7 +222,6 @@ class ScoringEngine:
             )
             return None
 
-        # Load workflow from MongoDB
         workflow = await self.mongo_storage.get_workflow(run.workflow_id, run.workflow_version)
         if workflow is None:
             logger.error(
@@ -238,7 +234,6 @@ class ScoringEngine:
             )
             return None
 
-        # Find step in workflow
         step = next((s for s in workflow.steps if s.step_id == step_id), None)
         if step is None:
             logger.error(
@@ -251,8 +246,6 @@ class ScoringEngine:
             )
             return None
 
-        # Load case from fixtures
-        # Get fixtures directory from environment or use default
         import os
 
         fixtures_dir = Path(os.environ.get("PR_REVIEW_FIXTURES_DIR", "fixtures/pr_review"))
@@ -269,11 +262,9 @@ class ScoringEngine:
             )
             return None
 
-        # Load raw I/O to get response text
         try:
             raw_io = self._load_raw_io(run_id, step_id)
             response_text = raw_io.get("response", "")
-            # Use latency from raw I/O if event doesn't have it
             if latency_ms is None:
                 latency_ms = raw_io.get("latency_ms", 0)
         except (RawIONotFoundError, ValueError) as e:
@@ -287,7 +278,6 @@ class ScoringEngine:
             )
             return None
 
-        # Score the step
         try:
             score = await self._score_step(
                 step=step,
@@ -328,9 +318,7 @@ class ScoringEngine:
                 if not self._running:
                     break
 
-                # Only process agent.response.received events
                 if envelope.event_type != AGENT_RESPONSE_RECEIVED:
-                    # Acknowledge non-score events without processing
                     await self.event_bus.ack(
                         STREAM_EVAL_STEPS,
                         "scoring",
@@ -338,11 +326,9 @@ class ScoringEngine:
                     )
                     continue
 
-                # Process the response
                 score = await self._process_response(envelope)
 
                 if score:
-                    # Emit step.scored event
                     event = EventEnvelope(
                         event_id=str(uuid.uuid4()),
                         event_type=STEP_SCORED,
@@ -358,7 +344,6 @@ class ScoringEngine:
                     )
                     await self.event_bus.publish(STREAM_SCORES, event)
 
-                # Acknowledge the message after processing
                 await self.event_bus.ack(
                     STREAM_EVAL_STEPS,
                     "scoring",
@@ -380,7 +365,6 @@ class ScoringEngine:
         self._running = False
         logger.info("Scoring engine stopped")
 
-    # Public API for direct scoring (useful for testing and re-scoring)
     async def score_response(
         self,
         run: EvaluationRun,
@@ -405,7 +389,6 @@ class ScoringEngine:
             UnknownStrategyError: If the scoring strategy is not recognized.
             FileNotFoundError: If the case cannot be loaded.
         """
-        # Load case from fixtures
         import os
 
         fixtures_dir = Path(os.environ.get("PR_REVIEW_FIXTURES_DIR", "fixtures/pr_review"))

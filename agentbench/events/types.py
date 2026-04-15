@@ -2,7 +2,7 @@
 
 This module provides:
 - Re-export of event constants from models.events
-- Stream-to-event mapping as defined in spec Section 8
+- Stream-to-event mapping
 - Helper functions for event type classification
 - Payload validation for lean event payloads
 """
@@ -25,7 +25,7 @@ from agentbench.models.events import (
     EventEnvelope,
 )
 
-# Stream keys as defined in spec Section 8
+# Stream keys
 STREAM_EVAL_RUNS = "stream:eval-runs"
 STREAM_EVAL_STEPS = "stream:eval-steps"
 STREAM_SCORES = "stream:scores"
@@ -39,7 +39,7 @@ STREAM_KEYS = {
     STREAM_REPORTS,
 }
 
-# Allowed payload fields per spec Section 8
+# Allowed payload fields
 ALLOWED_PAYLOAD_FIELDS = {
     "benchmark_id",
     "run_id",
@@ -84,7 +84,7 @@ MAX_PAYLOAD_SIZE = 1024 * 1024
 def get_stream_for_event(event_type: str) -> str:
     """Get the appropriate stream for an event type.
 
-    Mapping from spec Section 8:
+    Mapping:
     - stream:eval-runs: evaluation.run.*
     - stream:eval-steps: workflow.step.*, agent.response.received
     - stream:scores: step.scored, workflow.completed
@@ -242,14 +242,14 @@ def _check_content_size(payload: dict[str, Any]) -> bool:
 def validate_payload(payload: dict[str, Any]) -> bool:
     """Validate that a payload follows lean payload rules.
 
-    Per spec Section 8, disallowed payload contents:
+    Disallowed payload contents:
     - full diff contents
     - full ticket contents
     - full workflow definitions
     - full ground-truth documents
     - raw agent responses larger than metadata requirement
 
-    Allowed fields (per spec):
+    Allowed fields:
     - benchmark_id, run_id, workflow_id, agent_id, case_set_id, case_id, step_id
 
     Args:

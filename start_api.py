@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Start the AgentBench API server with environment variables loaded."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -19,5 +18,4 @@ import uvicorn  # noqa: E402
 from agentbench.api.app import app  # noqa: E402
 
 if __name__ == "__main__":
-    print(f"Starting API with MONGODB_URI={os.environ.get('MONGODB_URI', 'NOT SET')}")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

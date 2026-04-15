@@ -231,7 +231,7 @@ class TestPersistRawIO:
     async def test_persist_raw_io_contains_required_fields(
         self, dispatcher, sample_run, sample_step
     ):
-        """Test that the JSON contains all required fields per spec."""
+        """Test that the JSON contains all required fields."""
         request = {"prompt": "test prompt", "agent_id": "gpt-4o-mini"}
         response = '{"findings": []}'
         latency_ms = 1500

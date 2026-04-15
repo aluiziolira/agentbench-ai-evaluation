@@ -7,7 +7,7 @@ This module provides the Aggregator class which:
 4. Computes and persists BenchmarkReport when all runs complete
 5. Emits benchmark.report.generated event
 
-Service Contract (from spec Section 9.5):
+Service contract:
 - Consumes: stream:scores (step.scored, workflow.completed)
 - Publishes: stream:reports (benchmark.report.generated)
 - Owns: RunReport and BenchmarkReport documents in MongoDB

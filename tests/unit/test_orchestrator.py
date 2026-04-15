@@ -412,7 +412,7 @@ class TestWorkflowCompletion:
         assert len(workflow_completed_calls) == 1
 
         stream, envelope = workflow_completed_calls[0][0]
-        assert stream == STREAM_SCORES  # Per spec, workflow.completed goes to stream:scores
+        assert stream == STREAM_SCORES  # workflow.completed goes to stream:scores
         assert envelope.payload["run_id"] == sample_run.run_id
         assert envelope.payload["benchmark_id"] == sample_run.benchmark_id
 

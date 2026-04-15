@@ -37,7 +37,7 @@ class TestWorkflowValidation:
         assert workflow.scoring_aggregation == "weighted_average"
 
     def test_wf_pr_review_v1_has_exactly_two_steps(self) -> None:
-        """Test that workflow has exactly two steps as per spec."""
+        """Test that workflow has exactly two steps."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
         with open(workflow_path) as f:
@@ -74,7 +74,7 @@ class TestWorkflowValidation:
         assert "s2_review_summary" in step_ids, "Missing s2_review_summary step"
 
     def test_wf_pr_review_v1_step_1_configuration(self) -> None:
-        """Test that step 1 (s1_findings) is configured correctly per spec."""
+        """Test that step 1 (s1_findings) is configured correctly."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
         with open(workflow_path) as f:
@@ -95,7 +95,7 @@ class TestWorkflowValidation:
         assert "{diff_patch}" in step1.input
 
     def test_wf_pr_review_v1_step_2_configuration(self) -> None:
-        """Test that step 2 (s2_review_summary) is configured correctly per spec."""
+        """Test that step 2 (s2_review_summary) is configured correctly."""
         workflow_path = WORKFLOWS_DIR / "wf_pr_review_v1.json"
 
         with open(workflow_path) as f:
