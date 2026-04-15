@@ -8,7 +8,7 @@ import os
 import time
 from typing import Any
 
-from openai import AsyncOpenAI, AuthenticationError, RateLimitError
+from openai import AsyncOpenAI, AuthenticationError, RateLimitError, Timeout
 from openai.types.chat import ChatCompletionAssistantMessageParam, ChatCompletionMessageParam
 
 from agentbench.dispatcher.adapters.base import AgentAdapter
@@ -22,15 +22,15 @@ class OpenAIAdapter:
         This adapter uses the openai.AsyncOpenAI client to invoke models like
     gpt-4o-mini with temperature=0 for deterministic responses.
 
-        Attributes:
-            agent_id: Unique identifier for this agent (e.g., "gpt-4o-mini").
-            model: The OpenAI model name to use.
-            temperature: Sampling temperature (default 0 for determinism).
-            client: The AsyncOpenAI client instance.
+    Attributes:
+        agent_id: Unique identifier for this agent (e.g., "gpt-4o-mini").
+        model: The OpenAI model name to use.
+        temperature: Sampling temperature (default 0 for determinism).
+        client: The AsyncOpenAI client instance.
 
-        Example:
-            >>> adapter = OpenAIAdapter(model="gpt-4o-mini")
-            >>> text, latency = await adapter.invoke(step, run, [])
+    Example:
+        >>> adapter = OpenAIAdapter(model="gpt-4o-mini")
+        >>> text, latency = await adapter.invoke(step, run, [])
     """
 
     def __init__(
@@ -61,7 +61,7 @@ class OpenAIAdapter:
                 "or OPENAI_API_KEY environment variable."
             )
 
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(api_key=api_key, timeout=Timeout(60.0, connect=10.0))
 
     def _build_messages(
         self, conversation_history: list[dict[str, Any]], prompt: str
@@ -171,17 +171,20 @@ class OpenAIAdapter:
 
         try:
             return await asyncio.wait_for(
-                self._make_api_call(messages),
+                self._make_api_call(messages, timeout_seconds),
                 timeout=timeout_seconds,
             )
         except TimeoutError as e:
             raise TimeoutError(f"OpenAI request timed out after {timeout_seconds}s") from e
 
-    async def _make_api_call(self, messages: list[ChatCompletionMessageParam]) -> Any:
+    async def _make_api_call(
+        self, messages: list[ChatCompletionMessageParam], timeout_seconds: float
+    ) -> Any:
         """Make the actual OpenAI API call.
 
         Args:
             messages: List of message dicts with 'role' and 'content'.
+            timeout_seconds: Maximum time to wait for response.
 
         Returns:
             The OpenAI API response.
@@ -194,6 +197,7 @@ class OpenAIAdapter:
                 model=self.model,
                 messages=messages,
                 temperature=self.temperature,
+                timeout=timeout_seconds,
             )
         except AuthenticationError as e:
             raise RuntimeError(f"OpenAI authentication failed: {e}") from e

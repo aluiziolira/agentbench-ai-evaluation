@@ -38,8 +38,12 @@ Sample run on 8 PR review cases (E2E validated 2026-04-04):
 
 *Run your own comparison:*
 ```bash
-agentbench run --workflow wf_pr_review_v1 --case-set pr_review_cases_v1 \
-  --agents gpt-4o-mini --agents claude-haiku-4-5
+just demo        # Full demo with both agents
+# Or for custom comparison:
+# uv run python -m cli.main run \
+#   --workflow wf_pr_review_v1 \
+#   --case-set pr_review_cases_v1 \
+#   --agents gpt-4o-mini --agents claude-haiku-4-5
 ```
 
 ### Per-Case Breakdown
@@ -228,11 +232,11 @@ just init
 # Start all services in dev mode (foreground with logs)
 just dev
 
-# In another terminal, run the benchmark
+# In another terminal, run the demo (auto-starts benchmark + watches with visuals)
 just demo
 
-# Watch report with demo mode (enhanced visuals for presentations)
-uv run python -m cli.main report {benchmark_id} --watch --demo
+# Or for a faster demo (single agent, ~1.5 min instead of ~3 min):
+# just demo-quick
 ```
 
 ## Demo Mode
@@ -245,6 +249,15 @@ The CLI includes an enhanced **demo mode** with professional visuals for hiring 
 - 🎯 Topic icons (🛡 Auth, 🧪 Testing, 🔒 Null Safety, etc.)
 - 📈 Executive summary with performance grading
 - ⭐ Enhanced insights panel with visual hierarchy
+
+The `just demo` command runs the full benchmark with both agents and displays the enhanced report automatically:
+
+```bash
+just demo        # Full demo (~3 min, 2 agents, 8 cases)
+just demo-quick  # Quick demo (~1.5 min, 1 agent, 8 cases)
+```
+
+For viewing existing benchmarks:
 
 ```bash
 # View completed benchmark with demo visuals

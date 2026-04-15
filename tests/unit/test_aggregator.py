@@ -9,7 +9,7 @@ Tests cover:
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -249,26 +249,34 @@ class TestRunReportGeneration:
         )
         mock_mongo_storage.get_run.return_value = mock_run
 
-        # Act - Send workflow completed event
-        workflow_envelope = EventEnvelope(
-            event_id="evt-2",
-            event_type=WORKFLOW_COMPLETED,
-            timestamp=datetime.now(UTC).isoformat(),
-            correlation_id="run-1",
-            payload={
-                "run_id": "run-1",
-                "benchmark_id": "bench-1",
-                "workflow_id": "wf_pr_review_v1",
-            },
-        )
-        await aggregator._handle_workflow_completed(workflow_envelope)
+        # Mock load_case to return a case with tags
+        with patch("agentbench.aggregator.aggregator.load_case") as mock_load_case:
+            mock_case = MagicMock()
+            mock_case.tags = ["testing", "coverage"]
+            mock_load_case.return_value = mock_case
 
-        # Assert
-        mock_mongo_storage.create_run_report.assert_called_once()
-        report = mock_mongo_storage.create_run_report.call_args[0][0]
-        assert isinstance(report, RunReport)
-        assert report.run_id == "run-1"
-        assert report.total_score == 1.7
+            # Act - Send workflow completed event
+            workflow_envelope = EventEnvelope(
+                event_id="evt-2",
+                event_type=WORKFLOW_COMPLETED,
+                timestamp=datetime.now(UTC).isoformat(),
+                correlation_id="run-1",
+                payload={
+                    "run_id": "run-1",
+                    "benchmark_id": "bench-1",
+                    "workflow_id": "wf_pr_review_v1",
+                },
+            )
+            await aggregator._handle_workflow_completed(workflow_envelope)
+
+            # Assert
+            mock_mongo_storage.create_run_report.assert_called_once()
+            report = mock_mongo_storage.create_run_report.call_args[0][0]
+            assert isinstance(report, RunReport)
+            assert report.run_id == "run-1"
+            assert report.total_score == 1.7
+            # Verify case_tags were loaded from case
+            assert report.case_tags == ["testing", "coverage"]
 
     async def test_handle_workflow_completed_no_scores(
         self, aggregator, mock_mongo_storage, caplog

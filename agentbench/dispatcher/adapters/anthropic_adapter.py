@@ -8,7 +8,7 @@ import os
 import time
 from typing import Any
 
-from anthropic import AnthropicError, AsyncAnthropic, RateLimitError
+from anthropic import AnthropicError, AsyncAnthropic, RateLimitError, Timeout
 from anthropic.types import MessageParam
 
 from agentbench.dispatcher.adapters.base import AgentAdapter
@@ -61,7 +61,7 @@ class AnthropicAdapter:
                 "or ANTHROPIC_API_KEY environment variable."
             )
 
-        self.client = AsyncAnthropic(api_key=api_key)
+        self.client = AsyncAnthropic(api_key=api_key, timeout=Timeout(60.0, connect=10.0))
 
     async def invoke(
         self,
@@ -187,17 +187,18 @@ class AnthropicAdapter:
 
         try:
             return await asyncio.wait_for(
-                self._make_api_call(messages),
+                self._make_api_call(messages, timeout_seconds),
                 timeout=timeout_seconds,
             )
         except TimeoutError as e:
             raise TimeoutError(f"Anthropic request timed out after {timeout_seconds}s") from e
 
-    async def _make_api_call(self, messages: list[MessageParam]) -> Any:
+    async def _make_api_call(self, messages: list[MessageParam], timeout_seconds: float) -> Any:
         """Make the actual Anthropic API call.
 
         Args:
             messages: List of message dicts with 'role' and 'content'.
+            timeout_seconds: Maximum time to wait for response (passed to Anthropic client).
 
         Returns:
             The Anthropic API response.
@@ -211,6 +212,7 @@ class AnthropicAdapter:
                 messages=messages,
                 temperature=self.temperature,
                 max_tokens=4096,  # Required parameter for Anthropic
+                timeout=timeout_seconds,
             )
         except RateLimitError as e:
             raise RuntimeError(f"Anthropic rate limit exceeded: {e}") from e

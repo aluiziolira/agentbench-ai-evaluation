@@ -15,11 +15,13 @@ Service Contract (from spec Section 9.5):
 
 import asyncio
 import logging
+import os
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
+from pathlib import Path
 
-from agentbench.cases.loader import resolve_case_topic
+from agentbench.cases.loader import load_case, resolve_case_topic
 from agentbench.events.bus import EventBus
 from agentbench.events.types import STREAM_REPORTS, STREAM_SCORES
 from agentbench.models import (
@@ -282,12 +284,17 @@ class Aggregator:
             )
             return
 
+        # Load case to get tags
+        fixtures_dir = Path(os.environ.get("PR_REVIEW_FIXTURES_DIR", "fixtures/pr_review"))
+        case = load_case(run.case_id, fixtures_dir)
+        case_tags = case.tags
+
         # Compute and persist RunReport
         report = self._compute_run_report(
             run_id=run_id,
             benchmark_id=benchmark_id,
             case_id=run.case_id,
-            case_tags=[],  # Would load from case
+            case_tags=case_tags,
             agent_id=run.agent_id,
             workflow_id=run.workflow_id,
             scores=scores,

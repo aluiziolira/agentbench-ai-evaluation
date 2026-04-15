@@ -14,7 +14,7 @@
 #
 # See 'just --list' for all recipes
 
-set dotenv-load := false
+set dotenv-load := true
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -28,8 +28,8 @@ export MONGO_PORT := "27017"
 export REDIS_PORT := "6379"
 export COVERAGE_THRESHOLD := "80"
 export LOG_LEVEL := env("LOG_LEVEL", "INFO")
-
 ci := env("CI", "false")
+
 # ═════════════════════════════════════════════════════════════════════════════
 # INTERNAL HELPERS (prefixed with _)
 # ═════════════════════════════════════════════════════════════════════════════
@@ -37,32 +37,23 @@ ci := env("CI", "false")
 # Print formatted status message
 [private]
 _status message:
-    @echo -e "\033[1;34m[{{PROJECT_NAME}}]\033[0m {{message}}"
+    @echo -e "\033[1;34m[{{ PROJECT_NAME }}]\033[0m {{ message }}"
 
 # Print error and exit
 [private]
 _error message:
-    @echo -e "\033[1;31m[ERROR]\033[0m {{message}}" >&2
+    @echo -e "\033[1;31m[ERROR]\033[0m {{ message }}" >&2
     exit 1
 
 # Verify required tools are available
 [private]
 _verify-tool tool:
-    @command -v {{tool}} >/dev/null 2>&1 || { echo "ERROR: {{tool}} is required but not installed."; exit 1; }
+    @command -v {{ tool }} >/dev/null 2>&1 || { echo "ERROR: {{ tool }} is required but not installed."; exit 1; }
 
 # Wait for service with timeout and health check
 [private]
 _wait-for-service host port timeout_secs="30":
-    @timeout={{timeout_secs}}; host={{host}}; port={{port}}; \\
-    for i in $(seq 1 $timeout); do \\
-        if nc -z $host $port 2>/dev/null; then \\
-            echo "✓ $host:$port ready after ${i}s"; \\
-            exit 0; \\
-        fi; \\
-        sleep 1; \\
-    done; \\
-    echo "ERROR: $host:$port not ready after ${timeout}s" >&2; \\
-    exit 1
+    @timeout={{ timeout_secs }}; host={{ host }}; port={{ port }}; for i in $(seq 1 $timeout); do if nc -z $host $port 2>/dev/null; then echo "✓ $host:$port ready after ${i}s"; exit 0; fi; sleep 1; done; echo "ERROR: $host:$port not ready after ${timeout}s" >&2; exit 1
 
 # ═════════════════════════════════════════════════════════════════════════════
 # BOOTSTRAP & SETUP
@@ -109,8 +100,8 @@ start:
     @just _verify-tool docker
     @just _status "Starting infrastructure services..."
     docker compose up -d mongodb redis --wait
-    @just _wait-for-service localhost {{MONGO_PORT}}
-    @just _wait-for-service localhost {{REDIS_PORT}}
+    @just _wait-for-service localhost {{ MONGO_PORT }}
+    @just _wait-for-service localhost {{ REDIS_PORT }}
     @just _status "Infrastructure ready ✓"
 
 # Stop all infrastructure services
@@ -131,10 +122,10 @@ status:
 # View service logs (usage: just logs [service] [-f])
 [group('infra')]
 logs service="" *args="-f --tail=100":
-    @if [ -z "{{service}}" ]; then \
-        docker compose logs {{args}}; \
+    @if [ -z "{{ service }}" ]; then \
+        docker compose logs {{ args }}; \
     else \
-        docker compose logs {{args}} {{service}}; \
+        docker compose logs {{ args }} {{ service }}; \
     fi
 
 # Clean infrastructure volumes (⚠️ DESTRUCTIVE)
@@ -143,7 +134,7 @@ nuke:
     @echo -n "⚠️  This will DELETE all data volumes. Continue? [y/N] "
     @read -r response; [ "$response" = "y" ] || exit 1
     docker compose down -v --remove-orphans
-    docker volume rm -f {{COMPOSE_PROJECT_NAME}}_mongodb_data {{COMPOSE_PROJECT_NAME}}_redis_data 2>/dev/null || true
+    docker volume rm -f {{ COMPOSE_PROJECT_NAME }}_mongodb_data {{ COMPOSE_PROJECT_NAME }}_redis_data 2>/dev/null || true
     @just _status "Volumes destroyed"
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -160,29 +151,29 @@ seed:
 [group('app')]
 runtime *args:
     @just _status "Starting runtime..."
-    uv run python -m agentbench.main {{args}}
+    uv run python -m agentbench.main {{ args }}
 
 # Start API server
 [group('app')]
 api *args:
-    @just _status "Starting API server on port {{API_PORT}}..."
-    uv run python start_api.py {{args}}
+    @just _status "Starting API server on port {{ API_PORT }}..."
+    uv run python start_api.py {{ args }}
 
 # Start all services (background, logs to tmp)
 [group('app')]
 services-bg:
     @just _status "Starting services in background..."
-    @mkdir -p /tmp/{{PROJECT_NAME}}
+    @mkdir -p /tmp/{{ PROJECT_NAME }}
     @pkill -f "python -m agentbench.main" 2>/dev/null || true
     @pkill -f "python start_api.py" 2>/dev/null || true
     @sleep 1
     @just _status "Starting runtime..."
-    @nohup uv run python -m agentbench.main > /tmp/{{PROJECT_NAME}}/runtime.log 2>&1 &
+    @nohup uv run python -m agentbench.main > /tmp/{{ PROJECT_NAME }}/runtime.log 2>&1 &
     @just _status "Starting API..."
-    @nohup uv run python start_api.py > /tmp/{{PROJECT_NAME}}/api.log 2>&1 &
+    @nohup uv run python start_api.py > /tmp/{{ PROJECT_NAME }}/api.log 2>&1 &
     @sleep 2
-    @just _wait-for-service localhost {{API_PORT}} 30 || (just _error "API failed to start. Check /tmp/{{PROJECT_NAME}}/api.log"; exit 1)
-    @just _status "Services running. Logs: /tmp/{{PROJECT_NAME}}/"
+    @just _wait-for-service localhost {{ API_PORT }} 30 || (just _error "API failed to start. Check /tmp/{{ PROJECT_NAME }}/api.log"; exit 1)
+    @just _status "Services running. Logs: /tmp/{{ PROJECT_NAME }}/"
 
 # Stop background services
 [group('app')]
@@ -193,21 +184,22 @@ services-stop:
     @just _status "Services stopped"
 
 # Development mode: start everything + watch logs
+
 # Development mode: start everything + watch logs
 [group('dev')]
 dev: start services-bg
     @just _status "Development mode active. Press Ctrl+C to stop."
     @trap 'just services-stop; exit 0' INT
-    @tail -f /tmp/{{PROJECT_NAME}}/*.log 2>/dev/null || echo "No logs yet... waiting..."
+    @tail -f /tmp/{{ PROJECT_NAME }}/*.log 2>/dev/null || echo "No logs yet... waiting..."
     @sleep infinity
 
 # Health check all services
 [group('dev')]
 health:
     @just _status "Checking service health..."
-    @echo "  MongoDB (port {{MONGO_PORT}}): $(nc -z localhost {{MONGO_PORT}} 2>/dev/null && echo "✓ UP" || echo "✗ DOWN")"
-    @echo "  Redis (port {{REDIS_PORT}}): $(nc -z localhost {{REDIS_PORT}} 2>/dev/null && echo "✓ UP" || echo "✗ DOWN")"
-    @echo "  API (port {{API_PORT}}): $(curl -sf http://localhost:{{API_PORT}}/health >/dev/null 2>&1 && echo "✓ UP" || echo "✗ DOWN")"
+    @echo "  MongoDB (port {{ MONGO_PORT }}): $(nc -z localhost {{ MONGO_PORT }} 2>/dev/null && echo "✓ UP" || echo "✗ DOWN")"
+    @echo "  Redis (port {{ REDIS_PORT }}): $(nc -z localhost {{ REDIS_PORT }} 2>/dev/null && echo "✓ UP" || echo "✗ DOWN")"
+    @echo "  API (port {{ API_PORT }}): $(curl -sf http://localhost:{{ API_PORT }}/health >/dev/null 2>&1 && echo "✓ UP" || echo "✗ DOWN")"
 
 # Interactive development shell with env loaded
 [group('dev')]
@@ -223,13 +215,13 @@ shell:
 # Base pytest command (private, used by other test recipes)
 [private]
 _pytest *args:
-    uv run pytest {{args}}
+    uv run pytest {{ args }}
 
 # Run all tests with coverage
 [group('quality')]
 test *args:
     @just _status "Running tests..."
-    just _pytest {{args}}
+    just _pytest {{ args }}
 
 # Run unit tests only (fast, no external deps)
 [group('quality')]
@@ -243,12 +235,12 @@ test-integration *selector="tests/integration/test_pipeline.py":
     @if [ -z "${AGENTBENCH_INTEGRATION_TEST:-}" ]; then \
         just _error "Set AGENTBENCH_INTEGRATION_TEST=1 to run integration tests"; \
     fi
-    @if [ "{{ci}}" != "true" ]; then \
+    @if [ "{{ ci }}" != "true" ]; then \
         just _status "Starting infrastructure for local run..."; \
         just start; \
     fi
     @just _status "Running integration tests..."
-    just _pytest {{selector}} -v
+    just _pytest {{ selector }} -v
 
 # Lint check (ruff)
 [group('quality')]
@@ -277,7 +269,7 @@ typecheck:
 [group('quality')]
 coverage:
     @just _status "Running tests with coverage..."
-    uv run pytest tests/unit --cov=agentbench --cov=cli --cov-report=xml --cov-report=html --cov-fail-under={{COVERAGE_THRESHOLD}}
+    uv run pytest tests/unit --cov=agentbench --cov=cli --cov-report=xml --cov-report=html --cov-fail-under={{ COVERAGE_THRESHOLD }}
     @just _status "Coverage report generated: htmlcov/index.html"
 
 # Run all quality checks (lint + typecheck + coverage)
@@ -321,12 +313,11 @@ ci-pr:
 ci-test: test-unit
     @just _status "CI test gate passed ✓"
 
-
 # CI build: full Docker build verification
 [group('ci')]
 ci-build:
     @just _status "Building Docker image..."
-    docker build -t {{PROJECT_NAME}}:local .
+    docker build -t {{ PROJECT_NAME }}:local .
     @just _status "Docker build successful ✓"
 
 # Manual integration test with cost warning
@@ -343,16 +334,23 @@ test-manual: sync start services-bg
     AGENTBENCH_INTEGRATION_TEST=1 uv run pytest tests/integration/test_pipeline.py -v
 
     just services-stop
-# Run demo benchmark
-[group('demo')]
-demo:
-    @just _status "Running demo benchmark..."
-    uv run python -m cli.main run \
-        --workflow wf_pr_review_v1 \
-        --case-set pr_review_cases_v1 \
-        --agents gpt-4o-mini --agents claude-haiku-4-5
 
 # ═════════════════════════════════════════════════════════════════════════════
+# DEMO (Hiring Showcase)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Run demo benchmark with automatic report watching
+[group('demo')]
+demo:
+    @just _status "Starting demo benchmark with auto-watch..."
+    @bash scripts/demo-watch.sh
+
+# Run quick demo (4 cases, single agent for faster results)
+[group('demo')]
+demo-quick:
+    @just _status "Starting quick demo (4 cases, single agent)..."
+    @bash scripts/demo-watch.sh quick
+
 # MAINTENANCE
 # ═════════════════════════════════════════════════════════════════════════════
 
