@@ -95,6 +95,7 @@ def report(
     start_time = time.time()
     max_duration = 600  # 10 minute default timeout
     poll_interval = 5
+    poll_count = 0
 
     while True:
         try:
@@ -119,10 +120,13 @@ def report(
                     console.print(f"  uv run python -m cli.main report {benchmark_id}")
                     raise typer.Exit(1)
 
-                console.print("[yellow]Benchmark in progress...[/]")
+                console.print(
+                    f"[yellow]Benchmark in progress... ({elapsed:.0f}s elapsed, poll #{poll_count})[/]"
+                )
                 if not watch:
                     console.print("Use --watch to wait for completion")
                     break
+                poll_count += 1
                 time.sleep(poll_interval)
                 continue
 

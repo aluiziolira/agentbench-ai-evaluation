@@ -506,7 +506,7 @@ class TestReportDemoMode:
         assert result.exit_code == 0
 
         output = _strip_ansi(result.output)
-        assert "Benchmark in progress" in output
+        assert "🚀 Loading demo report" in output
         assert "DEMO_RENDERED show_per_case=True benchmark=bench-123" in output
         mock_sleep.assert_called_once_with(5)
         mock_demo_render.assert_called_once()
