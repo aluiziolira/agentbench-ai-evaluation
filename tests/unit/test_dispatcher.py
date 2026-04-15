@@ -21,6 +21,8 @@ from agentbench.dispatcher.adapters import AgentAdapter
 from agentbench.dispatcher.dispatcher import StepDispatcher
 from agentbench.events.types import (
     AGENT_RESPONSE_RECEIVED,
+    EVALUATION_RUN_FAILED,
+    STREAM_EVAL_RUNS,
     STREAM_EVAL_STEPS,
     WORKFLOW_STEP_TIMED_OUT,
 )
@@ -49,6 +51,16 @@ def mock_mongo_storage():
     storage = MagicMock()
     storage.get_run = AsyncMock()
     storage.get_workflow = AsyncMock()
+    storage.update_run_state = AsyncMock()
+    return storage
+
+
+@pytest.fixture
+def mock_redis_storage():
+    """Create a mock RedisStorage."""
+    storage = MagicMock()
+    storage.set_run_state = AsyncMock()
+    storage.mark_run_completed = AsyncMock()
     return storage
 
 
@@ -59,11 +71,12 @@ def temp_raw_io_dir(tmp_path):
 
 
 @pytest.fixture
-def dispatcher(mock_event_bus, mock_mongo_storage, temp_raw_io_dir):
+def dispatcher(mock_event_bus, mock_mongo_storage, mock_redis_storage, temp_raw_io_dir):
     """Create a StepDispatcher with mock dependencies."""
     return StepDispatcher(
         event_bus=mock_event_bus,
         mongo_storage=mock_mongo_storage,
+        redis_storage=mock_redis_storage,
         raw_io_dir=temp_raw_io_dir,
     )
 
@@ -320,7 +333,14 @@ class TestDispatchStep:
 
     @pytest.mark.asyncio
     async def test_dispatch_step_timeout_emits_timed_out(
-        self, dispatcher, mock_event_bus, sample_run, sample_step, sample_case
+        self,
+        dispatcher,
+        mock_event_bus,
+        mock_mongo_storage,
+        mock_redis_storage,
+        sample_run,
+        sample_step,
+        sample_case,
     ):
         """Test that timeout emits workflow.step.timed_out event."""
         # Create an adapter that never returns (simulates timeout)
@@ -345,10 +365,12 @@ class TestDispatchStep:
         ):
             await dispatcher._dispatch_step(sample_run, sample_step)
 
-        # Verify timeout event was published
-        mock_event_bus.publish.assert_called_once()
-        call_args = mock_event_bus.publish.call_args
-        stream, envelope = call_args[0]
+        # Verify timeout and run-failed events were published
+        assert mock_event_bus.publish.call_count == 2
+        first_call_args = mock_event_bus.publish.call_args_list[0][0]
+        second_call_args = mock_event_bus.publish.call_args_list[1][0]
+        stream, envelope = first_call_args
+        failed_stream, failed_envelope = second_call_args
 
         assert stream == STREAM_EVAL_STEPS
         assert isinstance(envelope, EventEnvelope)
@@ -356,6 +378,58 @@ class TestDispatchStep:
         assert envelope.payload["run_id"] == sample_run.run_id
         assert envelope.payload["step_id"] == sample_step.step_id
         assert envelope.correlation_id == sample_run.run_id
+
+        assert failed_stream == STREAM_EVAL_RUNS
+        assert isinstance(failed_envelope, EventEnvelope)
+        assert failed_envelope.event_type == EVALUATION_RUN_FAILED
+        assert failed_envelope.payload["run_id"] == sample_run.run_id
+        assert "timed out" in failed_envelope.payload["error"]
+
+        mock_redis_storage.set_run_state.assert_called_once_with(sample_run.run_id, RunState.FAILED)
+        mock_mongo_storage.update_run_state.assert_called_once_with(
+            sample_run.run_id, RunState.FAILED
+        )
+        mock_redis_storage.mark_run_completed.assert_called_once_with(
+            sample_run.benchmark_id, sample_run.run_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_dispatch_step_adapter_error_fails_run(
+        self,
+        dispatcher,
+        mock_event_bus,
+        mock_mongo_storage,
+        mock_redis_storage,
+        sample_run,
+        sample_step,
+        sample_case,
+    ):
+        """Test that adapter RuntimeError marks run as failed."""
+        mock_adapter = MagicMock(spec=AgentAdapter)
+        mock_adapter.agent_id = "gpt-4o-mini"
+        mock_adapter.invoke = AsyncMock(side_effect=RuntimeError("API authentication failed"))
+
+        with (
+            patch(
+                "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get", return_value=mock_adapter
+            ),
+            patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
+        ):
+            await dispatcher._dispatch_step(sample_run, sample_step)
+
+        mock_redis_storage.set_run_state.assert_called_once_with(sample_run.run_id, RunState.FAILED)
+        mock_mongo_storage.update_run_state.assert_called_once_with(
+            sample_run.run_id, RunState.FAILED
+        )
+        mock_redis_storage.mark_run_completed.assert_called_once_with(
+            sample_run.benchmark_id, sample_run.run_id
+        )
+        mock_event_bus.publish.assert_called_once()
+        stream, envelope = mock_event_bus.publish.call_args[0]
+        assert stream == STREAM_EVAL_RUNS
+        assert envelope.event_type == EVALUATION_RUN_FAILED
+        assert envelope.payload["run_id"] == sample_run.run_id
+        assert envelope.payload["error"] == "Step dispatch failed: API authentication failed"
 
     @pytest.mark.asyncio
     async def test_dispatch_step_timeout_no_persistence(

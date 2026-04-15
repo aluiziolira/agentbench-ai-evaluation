@@ -27,12 +27,15 @@ from agentbench.dispatcher.adapters import ADAPTER_REGISTRY
 from agentbench.events.bus import EventBus
 from agentbench.events.types import (
     AGENT_RESPONSE_RECEIVED,
+    EVALUATION_RUN_FAILED,
+    STREAM_EVAL_RUNS,
     STREAM_EVAL_STEPS,
     WORKFLOW_STEP_TIMED_OUT,
 )
-from agentbench.models import EvaluationRun, StepDefinition
+from agentbench.models import EvaluationRun, RunState, StepDefinition
 from agentbench.models.events import EventEnvelope
 from agentbench.storage.mongo import MongoStorage
+from agentbench.storage.redis_client import RedisStorage
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,7 @@ class StepDispatcher:
         self,
         event_bus: EventBus,
         mongo_storage: MongoStorage,
+        redis_storage: RedisStorage,
         raw_io_dir: Path = Path("data/raw_io"),
     ):
         """Initialize the step dispatcher.
@@ -65,8 +69,29 @@ class StepDispatcher:
         """
         self.event_bus = event_bus
         self.mongo_storage = mongo_storage
+        self.redis_storage = redis_storage
         self.raw_io_dir = raw_io_dir
         self._running = False
+
+    async def _fail_run(self, run: EvaluationRun, error_message: str) -> None:
+        """Mark a run as failed due to dispatch error."""
+        await self.redis_storage.set_run_state(run.run_id, RunState.FAILED)
+        await self.mongo_storage.update_run_state(run.run_id, RunState.FAILED)
+        await self.redis_storage.mark_run_completed(run.benchmark_id, run.run_id)
+        await self.event_bus.publish(
+            STREAM_EVAL_RUNS,
+            EventEnvelope(
+                event_id=str(uuid.uuid4()),
+                event_type=EVALUATION_RUN_FAILED,
+                timestamp=datetime.now(UTC).isoformat(),
+                correlation_id=run.run_id,
+                payload={
+                    "run_id": run.run_id,
+                    "error": error_message,
+                },
+            ),
+        )
+        logger.error("Run %s failed: %s", run.run_id, error_message)
 
     def _render_prompt(self, step: StepDefinition, case: ReviewCaseDefinition) -> str:
         """Render prompt template with case placeholders.
@@ -277,6 +302,10 @@ class StepDispatcher:
                 },
             )
             await self.event_bus.publish(STREAM_EVAL_STEPS, event)
+            await self._fail_run(run, f"Step {step.step_id} timed out after {timeout_seconds}s")
+        except Exception as e:
+            logger.error(f"Step {step.step_id} failed for run {run.run_id}: {e}")
+            await self._fail_run(run, f"Step dispatch failed: {e}")
 
     async def run(self) -> None:
         """Main loop - consume and dispatch steps.

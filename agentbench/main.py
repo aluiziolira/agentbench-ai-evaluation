@@ -133,6 +133,7 @@ class AgentBenchRuntime:
         self.dispatcher = StepDispatcher(
             event_bus=self.event_bus,
             mongo_storage=self.mongo_storage,
+            redis_storage=self.redis_storage,
             raw_io_dir=Path("data/raw_io"),
         )
         logger.info("Dispatcher initialized")
