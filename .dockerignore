@@ -72,7 +72,7 @@ htmlcov/
 logs/
 
 # Package manager lock files (not needed for build)
-uv.lock
+# uv.lock  <- needed for reproducible UV builds
 poetry.lock
 Pipfile.lock
 yarn.lock
