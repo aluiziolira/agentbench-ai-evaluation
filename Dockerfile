@@ -25,11 +25,11 @@ FROM python:3.12.13-slim-bookworm AS runtime
 LABEL org.opencontainers.image.title="AgentBench"
 LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.description="AI evaluation framework for PR review behavior"
-LABEL org.opencontainers.image.source="https://github.com/aluiziolira/agentbench"
+LABEL org.opencontainers.image.source="https://github.com/aluiziolira/agentbench-ai-evaluation"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="Aluizio Lira"
 LABEL org.opencontainers.image.authors="alumlira@gmail.com"
-LABEL org.opencontainers.image.documentation="https://github.com/aluiziolira/agentbench#readme"
+LABEL org.opencontainers.image.documentation="https://github.com/aluiziolira/agentbench-ai-evaluation#readme"
 
 # Python environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
