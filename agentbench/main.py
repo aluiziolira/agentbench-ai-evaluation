@@ -76,10 +76,6 @@ class AgentBenchRuntime:
 
     def _signal_handler(self, sig: signal.Signals) -> None:
         """Handle shutdown signals. Sync: signal handlers should do minimal work."""
-        """Handle shutdown signals."""
-        logger.info(f"Received signal {sig.name}, shutting down...")
-        """Handle shutdown signals. Sync: signal handlers should do minimal work."""
-        """Handle shutdown signals."""
         logger.info(f"Received signal {sig.name}, shutting down...")
         self._shutdown_event.set()
 
