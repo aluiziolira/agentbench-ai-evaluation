@@ -217,14 +217,8 @@ class Aggregator:
             per_case_topics=per_case_topics,
         )
 
-    async def _handle_step_scored(self, envelope: EventEnvelope) -> None:
-        """Handle step.scored event.
-
-        Accumulates the StepScore in memory keyed by run_id.
-
-        Args:
-            envelope: The EventEnvelope containing the step.scored event.
-        """
+    def _handle_step_scored(self, envelope: EventEnvelope) -> None:
+        """Accumulate step scores in memory keyed by run_id."""
         payload = envelope.payload
         run_id = payload["run_id"]
 
@@ -431,7 +425,7 @@ class Aggregator:
                         break
 
                     if envelope.event_type == STEP_SCORED:
-                        await self._handle_step_scored(envelope)
+                        self._handle_step_scored(envelope)
                     elif envelope.event_type == WORKFLOW_COMPLETED:
                         await self._handle_workflow_completed(envelope)
 

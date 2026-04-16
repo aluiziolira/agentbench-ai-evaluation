@@ -92,7 +92,7 @@ class TestScoreAccumulation:
         )
 
         # Act
-        await aggregator._handle_step_scored(envelope)
+        aggregator._handle_step_scored(envelope)
 
         # Assert
         scores = aggregator.get_accumulated_scores("run-1")
@@ -123,7 +123,7 @@ class TestScoreAccumulation:
                     "details": {},
                 },
             )
-            await aggregator._handle_step_scored(envelope)
+            aggregator._handle_step_scored(envelope)
 
         # Assert
         scores = aggregator.get_accumulated_scores("run-1")
@@ -152,7 +152,7 @@ class TestScoreAccumulation:
                     "details": {},
                 },
             )
-            await aggregator._handle_step_scored(envelope)
+            aggregator._handle_step_scored(envelope)
 
         # Assert
         assert len(aggregator.get_accumulated_scores("run-1")) == 1
@@ -231,7 +231,7 @@ class TestRunReportGeneration:
                 "details": {},
             },
         )
-        await aggregator._handle_step_scored(score_envelope)
+        aggregator._handle_step_scored(score_envelope)
 
         # Mock run retrieval
         mock_run = EvaluationRun(
@@ -325,7 +325,7 @@ class TestRunReportGeneration:
                 "details": {},
             },
         )
-        await aggregator._handle_step_scored(score_envelope)
+        aggregator._handle_step_scored(score_envelope)
 
         # Mock run retrieval to return None
         mock_mongo_storage.get_run.return_value = None
