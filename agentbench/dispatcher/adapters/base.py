@@ -38,28 +38,13 @@ class AgentAdapter(Protocol):
         run: EvaluationRun,
         conversation_history: list[dict[str, Any]],
     ) -> tuple[str, int]:
-        """Invoke the agent for a workflow step.
+        """Invoke the agent, returning (response_text, latency_ms).
 
-        Args:
-            step: The workflow step definition containing the prompt template.
-            run: The evaluation run context with case and agent information.
-            conversation_history: List of previous messages in the conversation,
-                each as a dict with 'role' and 'content' keys.
-
-        Returns:
-            A tuple of (response_text, latency_ms) where:
-                - response_text: The raw text response from the agent
-                - latency_ms: Execution latency in milliseconds (non-negative)
+        Implementations should use temperature=0 for determinism and measure
+        latency from request start to response completion.
 
         Raises:
-            TimeoutError: If the agent invocation exceeds the step timeout.
-            RuntimeError: If the API call fails or returns an invalid response.
-
-        Note:
-            Implementations should:
-            - Use temperature=0 for determinism
-            - Handle API timeouts gracefully
-            - Measure latency from request start to response completion
-            - Return meaningful error messages on failure
+            TimeoutError: If invocation exceeds the step timeout.
+            RuntimeError: If the API call fails or returns invalid response.
         """
         ...

@@ -41,20 +41,5 @@ class ScoringStrategy(Protocol):
         latency_ms: int,
         case: ReviewCaseDefinition,
     ) -> StepScore:
-        """Score an agent's response for a workflow step.
-
-        Args:
-            step: The workflow step definition containing scoring configuration.
-            response_text: The raw text response from the agent.
-            run_id: Unique identifier for this evaluation run.
-            latency_ms: Execution latency in milliseconds.
-            case: The review case definition with ground truth data.
-
-        Returns:
-            StepScore containing the computed score and metadata.
-
-        Note:
-            Implementations should handle parse failures gracefully and return
-            appropriate scores (typically 0.0) with explanatory details.
-        """
+        """Score an agent response. Handle parse failures gracefully (typically 0.0 with explanatory details)."""
         ...

@@ -54,12 +54,7 @@ class MongoStorage:
     """
 
     def __init__(self, mongo_uri: str, db_name: str) -> None:
-        """Initialize MongoDB storage.
-
-        Args:
-            mongo_uri: MongoDB connection URI (e.g., mongodb://localhost:27017).
-            db_name: Name of the database to use.
-        """
+        """Initialize MongoDB storage."""
         self.client: AsyncIOMotorClient[Any] = AsyncIOMotorClient(mongo_uri)
         self.db: AsyncIOMotorDatabase[Any] = self.client[db_name]
 
@@ -125,14 +120,7 @@ class MongoStorage:
     # ==========================================================================
 
     async def create_workflow(self, workflow: WorkflowDefinition) -> None:
-        """Create a new workflow definition.
-
-        Args:
-            workflow: The workflow definition to store.
-
-        Raises:
-            DuplicateKeyError: If a workflow with the same ID and version exists.
-        """
+        """Create a new workflow definition. Raises DuplicateKeyError if duplicate."""
         doc = workflow.model_dump()
         try:
             await self.db.workflows.insert_one(doc)
@@ -157,16 +145,9 @@ class MongoStorage:
     async def get_workflow(
         self, workflow_id: str, version: str | None = None
     ) -> WorkflowDefinition | None:
-        """Retrieve a workflow definition.
+        """Retrieve a workflow definition. Returns None if not found.
 
-        Args:
-            workflow_id: The workflow identifier.
-            version: Specific version to retrieve. If None, returns the latest
-                published version.
-
-        Returns:
-            The workflow definition, or None if not found.
-        """
+        If version is None, returns the latest published version."""
         if version:
             doc = await self.db.workflows.find_one({"workflow_id": workflow_id, "version": version})
         else:
@@ -182,18 +163,9 @@ class MongoStorage:
         return WorkflowDefinition.model_validate(doc)
 
     async def publish_workflow(self, workflow_id: str, version: str) -> None:
-        """Publish a workflow version.
+        """Publish a workflow version, making it immutable.
 
-        Once published, workflows become immutable. This method updates the
-        status from "draft" to "published" and sets the published_at timestamp.
-
-        Args:
-            workflow_id: The workflow identifier.
-            version: The version to publish.
-
-        Raises:
-            WorkflowNotFoundError: If the workflow doesn't exist.
-        """
+        Raises WorkflowNotFoundError if the workflow doesn't exist."""
         from datetime import datetime
 
         result = await self.db.workflows.update_one(
@@ -226,11 +198,7 @@ class MongoStorage:
         )
 
     async def list_workflows(self) -> list[WorkflowDefinition]:
-        """List all workflow definitions.
-
-        Returns:
-            List of all workflows in the database.
-        """
+        """List all workflow definitions."""
         cursor = self.db.workflows.find()
         workflows = []
         async for doc in cursor:
@@ -238,18 +206,7 @@ class MongoStorage:
         return workflows
 
     async def _check_workflow_mutable(self, workflow_id: str, version: str) -> bool:
-        """Check if a workflow is mutable (not published).
-
-        Args:
-            workflow_id: The workflow identifier.
-            version: The workflow version.
-
-        Returns:
-            True if the workflow is mutable (draft), False if published.
-
-        Raises:
-            WorkflowNotFoundError: If the workflow doesn't exist.
-        """
+        """Check if a workflow is mutable (draft). Raises WorkflowNotFoundError if missing."""
         doc = await self.db.workflows.find_one({"workflow_id": workflow_id, "version": version})
         if doc is None:
             raise WorkflowNotFoundError(f"Workflow {workflow_id} version {version} not found")
@@ -257,16 +214,7 @@ class MongoStorage:
         return status != "published"
 
     async def _enforce_immutability(self, workflow_id: str, version: str) -> None:
-        """Enforce immutability rule for published workflows.
-
-        Args:
-            workflow_id: The workflow identifier.
-            version: The workflow version.
-
-        Raises:
-            ImmutableWorkflowError: If the workflow is published.
-            WorkflowNotFoundError: If the workflow doesn't exist.
-        """
+        """Raise ImmutableWorkflowError if the workflow is published."""
         is_mutable = await self._check_workflow_mutable(workflow_id, version)
         if not is_mutable:
             raise ImmutableWorkflowError(
@@ -278,14 +226,7 @@ class MongoStorage:
     # ==========================================================================
 
     async def create_run(self, run: EvaluationRun) -> None:
-        """Create a new evaluation run.
-
-        Args:
-            run: The evaluation run to store.
-
-        Raises:
-            DuplicateKeyError: If a run with the same run_id exists.
-        """
+        """Create a new evaluation run. Raises DuplicateKeyError if duplicate."""
         doc = run.model_dump()
         try:
             await self.db.runs.insert_one(doc)
@@ -303,14 +244,7 @@ class MongoStorage:
             raise
 
     async def get_run(self, run_id: str) -> EvaluationRun | None:
-        """Retrieve an evaluation run.
-
-        Args:
-            run_id: The run identifier.
-
-        Returns:
-            The evaluation run, or None if not found.
-        """
+        """Retrieve an evaluation run by ID. Returns None if not found."""
         doc = await self.db.runs.find_one({"run_id": run_id})
         if doc is None:
             return None
@@ -322,16 +256,7 @@ class MongoStorage:
         state: RunState,
         current_step: int | None = None,
     ) -> None:
-        """Update the state of an evaluation run.
-
-        Args:
-            run_id: The run identifier.
-            state: The new state to set.
-            current_step: Optional step index to update.
-
-        Raises:
-            RunNotFoundError: If the run doesn't exist.
-        """
+        """Update run state. Raises RunNotFoundError if the run doesn't exist."""
         from datetime import datetime
 
         update_doc: dict[str, Any] = {
@@ -366,15 +291,7 @@ class MongoStorage:
         benchmark_id: str | None = None,
         case_set_id: str | None = None,
     ) -> list[EvaluationRun]:
-        """List evaluation runs with optional filtering.
-
-        Args:
-            benchmark_id: Optional filter by benchmark ID.
-            case_set_id: Optional filter by case set ID.
-
-        Returns:
-            List of matching evaluation runs.
-        """
+        """List evaluation runs, optionally filtered by benchmark_id or case_set_id."""
         query: dict[str, Any] = {}
         if benchmark_id:
             query["benchmark_id"] = benchmark_id
@@ -392,14 +309,7 @@ class MongoStorage:
     # ==========================================================================
 
     async def create_run_report(self, report: RunReport) -> None:
-        """Create a new run report.
-
-        Args:
-            report: The run report to store.
-
-        Raises:
-            DuplicateKeyError: If a report for this run_id already exists.
-        """
+        """Create a new run report. Raises DuplicateKeyError if duplicate."""
         doc = report.model_dump()
         try:
             await self.db.run_reports.insert_one(doc)
@@ -419,14 +329,7 @@ class MongoStorage:
             raise
 
     async def get_run_report(self, run_id: str) -> RunReport | None:
-        """Retrieve a run report.
-
-        Args:
-            run_id: The run identifier.
-
-        Returns:
-            The run report, or None if not found.
-        """
+        """Retrieve a run report by run_id. Returns None if not found."""
         doc = await self.db.run_reports.find_one({"run_id": run_id})
         if doc is None:
             return None
@@ -437,14 +340,7 @@ class MongoStorage:
     # ==========================================================================
 
     async def create_benchmark_report(self, report: BenchmarkReport) -> None:
-        """Create a new benchmark report.
-
-        Args:
-            report: The benchmark report to store.
-
-        Raises:
-            DuplicateKeyError: If a report for this benchmark_id already exists.
-        """
+        """Create a new benchmark report. Raises DuplicateKeyError if duplicate."""
         doc = report.model_dump()
         try:
             await self.db.benchmark_reports.insert_one(doc)
@@ -464,14 +360,7 @@ class MongoStorage:
             raise
 
     async def get_benchmark_report(self, benchmark_id: str) -> BenchmarkReport | None:
-        """Retrieve a benchmark report.
-
-        Args:
-            benchmark_id: The benchmark identifier.
-
-        Returns:
-            The benchmark report, or None if not found.
-        """
+        """Retrieve a benchmark report by benchmark_id. Returns None if not found."""
         doc = await self.db.benchmark_reports.find_one({"benchmark_id": benchmark_id})
         if doc is None:
             return None

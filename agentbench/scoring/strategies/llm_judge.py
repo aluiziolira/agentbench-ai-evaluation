@@ -65,25 +65,12 @@ class LLMJudgeStrategy:
     strategy_id: str = "llm_judge"
 
     def __init__(self, client: Any | None = None) -> None:
-        """Initialize the LLM judge strategy.
-
-        Args:
-            client: Optional pre-configured OpenAI client.
-                If not provided, a new client will be created using default
-                environment configuration (OPENAI_API_KEY).
-        """
+        """Initialize LLM judge with optional pre-configured OpenAI client."""
         self._client = client
         self._judge_model = DEFAULT_JUDGE_MODEL
 
     def _get_client(self) -> Any:
-        """Get or create the OpenAI client.
-
-        Returns:
-            Configured OpenAI AsyncOpenAI client.
-
-        Raises:
-            ImportError: If openai package is not installed.
-        """
+        """Get or create the OpenAI client."""
         if self._client is not None:
             return self._client
 
@@ -102,15 +89,7 @@ class LLMJudgeStrategy:
         summary_text: str,
         case: ReviewCaseDefinition,
     ) -> str:
-        """Build the judge prompt with rubric and case data.
-
-        Args:
-            summary_text: The review summary text to evaluate.
-            case: The review case containing ticket and diff.
-
-        Returns:
-            Formatted judge prompt string.
-        """
+        """Build the judge prompt with rubric and case data."""
         return JUDGE_PROMPT_TEMPLATE.format(
             summary_text=summary_text,
             ticket_text=case.ticket_text,
@@ -118,19 +97,9 @@ class LLMJudgeStrategy:
         )
 
     def _parse_judge_response(self, response_text: str) -> tuple[float, str]:
-        """Parse the judge response to extract score and reasoning.
+        """Parse judge response to extract score and reasoning.
 
-        Attempts to extract a JSON object with 'score' and 'reasoning' fields.
         Falls back to pattern matching if JSON parsing fails.
-
-        Args:
-            response_text: Raw text response from the judge LLM.
-
-        Returns:
-            Tuple of (score: float, reasoning: str).
-
-        Raises:
-            ValueError: If response cannot be parsed for a valid score.
         """
         json_patterns = [
             r"```json\s*(\{.*?\})\s*```",  # Markdown JSON block
@@ -175,14 +144,7 @@ class LLMJudgeStrategy:
         raise ValueError(f"Could not parse valid score from judge response: {response_text[:200]}")
 
     async def _invoke_judge(self, prompt: str) -> str:
-        """Invoke the judge LLM with the given prompt.
-
-        Args:
-            prompt: The formatted judge prompt.
-
-        Returns:
-            Raw text response from the judge LLM.
-        """
+        """Invoke the judge LLM with the given prompt."""
         client = self._get_client()
 
         response = await client.chat.completions.create(
@@ -210,19 +172,7 @@ class LLMJudgeStrategy:
     ) -> StepScore:
         """Score the review summary using an LLM judge.
 
-        Args:
-            step: The workflow step definition containing scoring configuration.
-            response_text: The review summary text to evaluate.
-            run_id: Unique identifier for this evaluation run.
-            latency_ms: Latency of the agent response in milliseconds.
-            case: The review case containing ticket and diff context.
-
-        Returns:
-            StepScore containing the computed score and metadata.
-
-        Note:
-            If the judge response cannot be parsed, returns a neutral score
-            of 0.5 with an explanation in the details.
+        On parse failure, returns a neutral score of 0.5.
         """
         judge_prompt = self._build_judge_prompt(response_text, case)
 
