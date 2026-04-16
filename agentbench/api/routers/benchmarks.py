@@ -1,10 +1,11 @@
 """Benchmark API endpoints."""
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agentbench.models import EVALUATION_RUN_REQUESTED, BenchmarkReport, EventEnvelope
 
@@ -12,9 +13,19 @@ router = APIRouter()
 
 
 class CreateBenchmarkRequest(BaseModel):
-    workflow_id: str
-    case_set_id: str
-    agents: list[str]
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    workflow_id: str = Field(..., min_length=1)
+    case_set_id: str = Field(..., min_length=1)
+    agents: list[str] = Field(..., min_length=1)
+
+    @field_validator("agents", mode="after")
+    @classmethod
+    def validate_agents_not_empty(cls, v: list[str]) -> list[str]:
+        for agent in v:
+            if not agent:
+                raise ValueError("Agent identifiers cannot be empty")
+        return v
 
 
 class BenchmarkResponse(BaseModel):
@@ -28,7 +39,6 @@ async def create_benchmark(
     req: Request,
 ) -> BenchmarkResponse:
     """Trigger a new benchmark run."""
-    import uuid
 
     benchmark_id = str(uuid.uuid4())
 

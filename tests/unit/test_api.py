@@ -160,6 +160,60 @@ class TestCreateBenchmark:
         assert response.status_code == 404
         assert "Workflow not found" in response.json()["detail"]
 
+    @pytest.mark.parametrize(
+        "payload,expected_detail_fragment",
+        [
+            (
+                {
+                    "workflow_id": "",
+                    "case_set_id": "cs_1",
+                    "agents": ["gpt-4o-mini"],
+                },
+                "String should have at least 1 character",
+            ),
+            (
+                {
+                    "workflow_id": "wf_1",
+                    "case_set_id": "   ",
+                    "agents": ["gpt-4o-mini"],
+                },
+                "String should have at least 1 character",
+            ),
+            (
+                {
+                    "workflow_id": "wf_1",
+                    "case_set_id": "cs_1",
+                    "agents": [],
+                },
+                "List should have at least 1 item",
+            ),
+            (
+                {
+                    "workflow_id": "wf_1",
+                    "case_set_id": "cs_1",
+                    "agents": [""],
+                },
+                "Agent identifiers cannot be empty",
+            ),
+            (
+                {
+                    "workflow_id": "wf_1",
+                    "case_set_id": "cs_1",
+                    "agents": ["  "],
+                },
+                "Agent identifiers cannot be empty",
+            ),
+        ],
+    )
+    def test_create_benchmark_validation_rejects_invalid(
+        self, test_client, payload, expected_detail_fragment
+    ):
+        """Test that invalid request bodies produce 422."""
+        response = test_client.post("/benchmarks", json=payload)
+        assert response.status_code == 422
+        detail = str(response.json())
+        assert expected_detail_fragment in detail
+
 
 class TestGetBenchmark:
     """Tests for getting benchmark reports."""
@@ -314,11 +368,13 @@ class TestRegisterWorkflow:
         assert data["version"] == "1.0.0"
 
     def test_register_workflow_duplicate(self, test_client, mock_mongo_storage):
-        """Test workflow registration with duplicate key."""
+        """Test duplicate workflow registration returns 409 with sanitized message."""
         # Arrange
         from pymongo.errors import DuplicateKeyError
 
-        mock_mongo_storage.create_workflow.side_effect = DuplicateKeyError("Duplicate key")
+        mock_mongo_storage.create_workflow.side_effect = DuplicateKeyError(
+            "E11000 duplicate key error collection..."
+        )
 
         workflow_data = {
             "workflow_id": "wf_test_v1",
@@ -333,7 +389,32 @@ class TestRegisterWorkflow:
         response = test_client.post("/workflows", json=workflow_data)
 
         # Assert
+        assert response.status_code == 409
+        assert response.json()["detail"] == "Workflow already exists"
+
+    def test_register_workflow_generic_error(self, test_client, mock_mongo_storage):
+        """Test generic error returns 400 with sanitized message, not internal details."""
+        # Arrange
+        mock_mongo_storage.create_workflow.side_effect = RuntimeError(
+            "connection refused to mongodb://internal-host:27017"
+        )
+
+        workflow_data = {
+            "workflow_id": "wf_test_v1",
+            "version": "1.0.0",
+            "status": "draft",
+            "description": "Test workflow",
+            "steps": [],
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+
+        # Act
+        response = test_client.post("/workflows", json=workflow_data)
+
+        # Assert - must not leak internal error
         assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid workflow operation"
+        assert "mongodb" not in response.json()["detail"].lower()
 
 
 class TestGetWorkflow:
@@ -403,7 +484,7 @@ class TestPublishWorkflow:
         assert data["status"] == "published"
 
     def test_publish_workflow_not_found(self, test_client, mock_mongo_storage):
-        """Test publishing non-existent workflow."""
+        """Test publishing non-existent workflow returns 404 with sanitized message."""
         # Arrange
         from agentbench.storage.mongo import WorkflowNotFoundError
 
@@ -413,4 +494,36 @@ class TestPublishWorkflow:
         response = test_client.post("/workflows/nonexistent/publish?version=1.0.0")
 
         # Assert
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Workflow not found"
+
+    def test_publish_workflow_already_published(self, test_client, mock_mongo_storage):
+        """Test publishing already-published workflow returns 409."""
+        # Arrange
+        from agentbench.storage.mongo import ImmutableWorkflowError
+
+        mock_mongo_storage.publish_workflow.side_effect = ImmutableWorkflowError(
+            "Already published"
+        )
+
+        # Act
+        response = test_client.post("/workflows/wf_test_v1/publish?version=1.0.0")
+
+        # Assert
+        assert response.status_code == 409
+        assert response.json()["detail"] == "Workflow version is already published"
+
+    def test_publish_workflow_generic_error(self, test_client, mock_mongo_storage):
+        """Test generic publish error returns 400 with sanitized message."""
+        # Arrange
+        mock_mongo_storage.publish_workflow.side_effect = RuntimeError(
+            "timeout after 30000ms on shard xyz"
+        )
+
+        # Act
+        response = test_client.post("/workflows/wf_test_v1/publish?version=1.0.0")
+
+        # Assert - must not leak internal error
         assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid workflow operation"
+        assert "shard" not in response.json()["detail"].lower()
