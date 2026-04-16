@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: Builder
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.12.13-slim-bookworm AS builder
 
 WORKDIR /app
 
 # Install UV
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /bin/
 
 # Copy source code and project metadata for building
 COPY pyproject.toml .
@@ -19,13 +19,22 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --no-cache "."
 
 # Stage 2: Runtime
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12.13-slim-bookworm AS runtime
 
 # OCI Labels
 LABEL org.opencontainers.image.title="AgentBench"
 LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.description="AI evaluation framework for PR review behavior"
 LABEL org.opencontainers.image.source="https://github.com/aluiziolira/agentbench"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.vendor="Aluizio Lira"
+LABEL org.opencontainers.image.authors="alumlira@gmail.com"
+LABEL org.opencontainers.image.documentation="https://github.com/aluiziolira/agentbench#readme"
+
+# Python environment
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1
 
 WORKDIR /app
 
