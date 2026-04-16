@@ -311,7 +311,7 @@ class TestGracefulShutdown:
         assert not runtime._shutdown_event.is_set()
 
         # Trigger signal handler
-        await runtime._signal_handler(signal.SIGTERM)
+        runtime._signal_handler(signal.SIGTERM)
 
         # Event should be set
         assert runtime._shutdown_event.is_set()

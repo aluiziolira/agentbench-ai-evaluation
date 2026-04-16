@@ -11,6 +11,7 @@ import signal
 import sys
 import traceback
 from collections.abc import Coroutine
+from functools import partial
 from pathlib import Path
 
 import structlog
@@ -73,31 +74,23 @@ class AgentBenchRuntime:
         self._shutdown_event = asyncio.Event()
         self._tasks: list[asyncio.Task[object]] = []
 
-    async def _signal_handler(self, sig: signal.Signals) -> None:
+    def _signal_handler(self, sig: signal.Signals) -> None:
+        """Handle shutdown signals. Sync: signal handlers should do minimal work."""
+        """Handle shutdown signals."""
+        logger.info(f"Received signal {sig.name}, shutting down...")
+        """Handle shutdown signals. Sync: signal handlers should do minimal work."""
         """Handle shutdown signals."""
         logger.info(f"Received signal {sig.name}, shutting down...")
         self._shutdown_event.set()
 
     def _setup_signal_handlers(self) -> None:
-        """Set up signal handlers for graceful shutdown.
-
-        This must be called before starting services to ensure signals
-        are caught during initialization.
-        """
+        """Set up signal handlers for graceful shutdown."""
         loop = asyncio.get_event_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            # Use a regular function that sets the event directly
-            # instead of creating an async task
-            def handle_signal(s: signal.Signals = sig) -> None:
-                # Schedule the async handler in the event loop
-                asyncio.create_task(self._signal_handler(s))
-
-            try:
-                loop.add_signal_handler(sig, handle_signal)
-                logger.debug(f"Registered signal handler for {sig.name}")
-            except ValueError as e:
-                # Can happen on Windows or if signal handlers already set
-                logger.warning(f"Could not set signal handler for {sig.name}: {e}")
+        try:
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, partial(self._signal_handler, sig))
+        except ValueError:
+            logger.warning("Signal handlers can only be set in main thread")
 
     async def initialize(self) -> None:
         """Initialize all services."""
