@@ -201,44 +201,36 @@ class TestRenderPrompt:
 class TestPersistRawIO:
     """Test raw I/O persistence to filesystem."""
 
-    async def test_persist_raw_io_creates_directory(self, dispatcher, sample_run, sample_step):
+    def test_persist_raw_io_creates_directory(self, dispatcher, sample_run, sample_step):
         """Test that the run directory is created if it doesn't exist."""
         request = {"prompt": "test prompt", "agent_id": "gpt-4o-mini"}
         response = '{"findings": []}'
         latency_ms = 1500
 
-        io_file = await dispatcher._persist_raw_io(
-            sample_run, sample_step, request, response, latency_ms
-        )
+        io_file = dispatcher._persist_raw_io(sample_run, sample_step, request, response, latency_ms)
 
         assert io_file.parent.exists()
         assert io_file.parent.name == sample_run.run_id
 
-    async def test_persist_raw_io_creates_json_file(self, dispatcher, sample_run, sample_step):
+    def test_persist_raw_io_creates_json_file(self, dispatcher, sample_run, sample_step):
         """Test that a JSON file is created with the correct name."""
         request = {"prompt": "test prompt", "agent_id": "gpt-4o-mini"}
         response = '{"findings": []}'
         latency_ms = 1500
 
-        io_file = await dispatcher._persist_raw_io(
-            sample_run, sample_step, request, response, latency_ms
-        )
+        io_file = dispatcher._persist_raw_io(sample_run, sample_step, request, response, latency_ms)
 
         assert io_file.exists()
         assert io_file.suffix == ".json"
         assert io_file.stem == sample_step.step_id
 
-    async def test_persist_raw_io_contains_required_fields(
-        self, dispatcher, sample_run, sample_step
-    ):
+    def test_persist_raw_io_contains_required_fields(self, dispatcher, sample_run, sample_step):
         """Test that the JSON contains all required fields."""
         request = {"prompt": "test prompt", "agent_id": "gpt-4o-mini"}
         response = '{"findings": []}'
         latency_ms = 1500
 
-        io_file = await dispatcher._persist_raw_io(
-            sample_run, sample_step, request, response, latency_ms
-        )
+        io_file = dispatcher._persist_raw_io(sample_run, sample_step, request, response, latency_ms)
 
         data = json.loads(io_file.read_text())
         assert data["run_id"] == sample_run.run_id
@@ -266,7 +258,7 @@ class TestDispatchStep:
         mock_adapter.invoke = AsyncMock(return_value=('{"findings": []}', 1500))
 
         with (
-            patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock),
+            patch.object(dispatcher, "_persist_raw_io", new_callable=MagicMock),
             patch(
                 "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
                 return_value=mock_adapter,
@@ -301,7 +293,7 @@ class TestDispatchStep:
                 return_value=mock_adapter,
             ),
             patch("agentbench.dispatcher.dispatcher.load_case", return_value=sample_case),
-            patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock) as mock_persist,
+            patch.object(dispatcher, "_persist_raw_io", new_callable=MagicMock) as mock_persist,
         ):
             await dispatcher._dispatch_step(sample_run, sample_step)
 
@@ -447,7 +439,7 @@ class TestDispatchStep:
         sample_step.timeout_ms = 100
 
         with (
-            patch.object(dispatcher, "_persist_raw_io", new_callable=AsyncMock),
+            patch.object(dispatcher, "_persist_raw_io", new_callable=MagicMock),
             patch(
                 "agentbench.dispatcher.dispatcher.ADAPTER_REGISTRY.get",
                 return_value=mock_adapter,

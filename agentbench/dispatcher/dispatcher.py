@@ -116,7 +116,7 @@ class StepDispatcher:
         result = result.replace("{case_id}", case.case_id)
         return result
 
-    async def _persist_raw_io(
+    def _persist_raw_io(
         self,
         run: EvaluationRun,
         step: StepDefinition,
@@ -124,23 +124,7 @@ class StepDispatcher:
         response: str,
         latency_ms: int,
     ) -> Path:
-        """Persist raw I/O to filesystem.
-
-        File format:
-        - Path: data/raw_io/{run_id}/{step_id}.json
-        - Contents: run_id, case_set_id, case_id, step_id, agent_id,
-                    request, response, latency_ms, timestamp
-
-        Args:
-            run: The evaluation run.
-            step: The workflow step.
-            request: The request dict sent to the agent.
-            response: The raw response string from the agent.
-            latency_ms: Execution latency in milliseconds.
-
-        Returns:
-            Path to the persisted file.
-        """
+        """Persist raw I/O to filesystem. Called via asyncio.to_thread."""
         run_dir = self.raw_io_dir / run.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -228,7 +212,7 @@ class StepDispatcher:
                 timeout=timeout_seconds,
             )
 
-            await self._persist_raw_io(run, step, request, response, latency_ms)
+            await asyncio.to_thread(self._persist_raw_io, run, step, request, response, latency_ms)
 
             event = EventEnvelope(
                 event_id=str(uuid.uuid4()),
