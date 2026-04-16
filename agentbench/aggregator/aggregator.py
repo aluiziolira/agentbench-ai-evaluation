@@ -21,6 +21,8 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pymongo.errors import DuplicateKeyError
+
 from agentbench.cases.loader import load_case, resolve_case_topic
 from agentbench.events.bus import EventBus
 from agentbench.events.types import STREAM_REPORTS, STREAM_SCORES
@@ -157,7 +159,7 @@ class Aggregator:
         Returns:
             A BenchmarkReport with agent summaries and per-case scores.
         """
-        # Group by agent
+        # Aggregate scores by agent
         agent_scores: dict[str, list[float]] = defaultdict(list)
         agent_latencies: dict[str, list[int]] = defaultdict(list)
         agent_failures: dict[str, int] = defaultdict(int)
@@ -166,25 +168,25 @@ class Aggregator:
             agent_scores[report.agent_id].append(report.total_score)
             agent_latencies[report.agent_id].append(report.total_latency_ms)
 
-        # Per-case scores: case_id -> {agent_id -> score}
+        # Track per-case scores for cross-agent comparison
         per_case_scores: dict[str, dict[str, float]] = defaultdict(dict)
         for report in run_reports:
             per_case_scores[report.case_id][report.agent_id] = report.total_score
 
-        # Per-case topics: case_id -> canonical topic name
+        # Map each case to its canonical topic
         per_case_topics: dict[str, str] = {}
         seen_cases: set[str] = set()
         for report in run_reports:
             if report.case_id not in seen_cases:
                 seen_cases.add(report.case_id)
                 per_case_topics[report.case_id] = resolve_case_topic(report.case_tags)
-        # Build agent summaries
+        # Build final agent summaries with step breakdowns
         agents = []
         for agent_id in agent_scores:
             scores = agent_scores[agent_id]
             latencies = agent_latencies[agent_id]
 
-            # Calculate step breakdown (average score per step_id)
+            # Average step scores across all runs for this agent
             step_scores: dict[str, list[float]] = defaultdict(list)
             for report in run_reports:
                 if report.agent_id == agent_id:
@@ -305,11 +307,12 @@ class Aggregator:
                     "total_score": report.total_score,
                 },
             )
-        except Exception as e:
-            logger.error(
-                f"Failed to create run report: {e}",
+        except DuplicateKeyError:
+            logger.warning(
+                f"Run report already exists for {run_id}, treating as idempotent",
                 extra={"correlation_id": run_id, "run_id": run_id},
             )
+        except Exception:
             raise
 
         # Mark run as completed in Redis
@@ -379,11 +382,12 @@ class Aggregator:
                     "agent_count": len(benchmark_report.agents),
                 },
             )
-        except Exception as e:
-            logger.error(
-                f"Failed to create benchmark report: {e}",
+        except DuplicateKeyError:
+            logger.warning(
+                f"Benchmark report already exists for {benchmark_id}, treating as idempotent",
                 extra={"correlation_id": benchmark_id, "benchmark_id": benchmark_id},
             )
+        except Exception:
             raise
 
         # Emit report generated event
