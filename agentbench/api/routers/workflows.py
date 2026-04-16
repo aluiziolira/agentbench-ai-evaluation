@@ -1,10 +1,13 @@
-"""Workflow API endpoints."""
-
+import logging
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request
+from pymongo.errors import DuplicateKeyError
 
 from agentbench.models import WorkflowDefinition
+from agentbench.storage.mongo import ImmutableWorkflowError, WorkflowNotFoundError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,8 +20,11 @@ async def register_workflow(workflow: WorkflowDefinition, req: Request) -> dict[
     try:
         await mongo.create_workflow(workflow)
         return {"workflow_id": workflow.workflow_id, "version": workflow.version}
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Workflow already exists") from None
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+        logger.error(f"Failed to create workflow: {e}")
+        raise HTTPException(status_code=400, detail="Invalid workflow operation") from None
 
 
 @router.get("/{workflow_id}")
@@ -41,5 +47,12 @@ async def publish_workflow(workflow_id: str, version: str, req: Request) -> dict
     try:
         await mongo.publish_workflow(workflow_id, version)
         return {"workflow_id": workflow_id, "version": version, "status": "published"}
+    except WorkflowNotFoundError:
+        raise HTTPException(status_code=404, detail="Workflow not found") from None
+    except ImmutableWorkflowError:
+        raise HTTPException(
+            status_code=409, detail="Workflow version is already published"
+        ) from None
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+        logger.error(f"Failed to publish workflow: {e}")
+        raise HTTPException(status_code=400, detail="Invalid workflow operation") from None

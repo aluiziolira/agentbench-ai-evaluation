@@ -288,7 +288,7 @@ class ScoringEngine:
                 case=case,
             )
             return score
-        except Exception as e:
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
             logger.exception(
                 f"Failed to score step {step_id} for run {run_id}: {e}",
                 extra={

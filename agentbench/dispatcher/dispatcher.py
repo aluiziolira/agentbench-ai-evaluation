@@ -263,7 +263,7 @@ class StepDispatcher:
             )
             await self.event_bus.publish(STREAM_EVAL_STEPS, event)
             await self._fail_run(run, f"Step {step.step_id} timed out after {timeout_seconds}s")
-        except Exception as e:
+        except (RuntimeError, ValueError, ConnectionError, OSError, json.JSONDecodeError) as e:
             logger.error("Step %s failed for run %s: %s", step.step_id, run.run_id, e)
             await self._fail_run(run, f"Step dispatch failed: {e}")
 
