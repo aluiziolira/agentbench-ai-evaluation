@@ -25,18 +25,14 @@ from agentbench.scoring.engine import ScoringEngine
 from agentbench.storage.mongo import MongoStorage
 from agentbench.storage.redis_client import RedisStorage
 
-# Load environment variables
 load_dotenv()
 
-# Configure standard library logging first (before structlog)
-# This ensures logs from third-party libraries are visible
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     level=logging.INFO,
     stream=sys.stdout,
 )
 
-# Configure structlog
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
@@ -46,7 +42,6 @@ structlog.configure(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
-        # Use console renderer for development visibility
         structlog.dev.ConsoleRenderer(colors=True)
         if sys.stdout.isatty()
         else structlog.processors.JSONRenderer(),
@@ -75,7 +70,6 @@ class AgentBenchRuntime:
         self._tasks: list[asyncio.Task[object]] = []
 
     def _signal_handler(self, sig: signal.Signals) -> None:
-        """Handle shutdown signals. Sync: signal handlers should do minimal work."""
         logger.info(f"Received signal {sig.name}, shutting down...")
         self._shutdown_event.set()
 
@@ -89,7 +83,6 @@ class AgentBenchRuntime:
             logger.warning("Signal handlers can only be set in main thread")
 
     async def initialize(self) -> None:
-        """Initialize all services."""
         logger.info("Initializing AgentBench runtime...")
         settings = get_settings()
 
@@ -98,16 +91,13 @@ class AgentBenchRuntime:
         logger.info("MongoDB storage initialized")
 
         self.redis_storage = RedisStorage(redis_url=settings.redis_url)
-        # Ensure Redis client is connected
         _ = await self.redis_storage._get_client()
         logger.info("Redis storage initialized")
 
-        # Event bus - needs the underlying redis client
         redis_client = await self.redis_storage._get_client()
         self.event_bus = EventBus(redis_client=redis_client)
         logger.info("Event bus initialized")
 
-        # Services
         self.orchestrator = Orchestrator(
             event_bus=self.event_bus,
             mongo_storage=self.mongo_storage,
@@ -139,7 +129,6 @@ class AgentBenchRuntime:
         logger.info("All services initialized")
 
     async def start(self) -> None:
-        """Start all services."""
         logger.info("Starting AgentBench services...")
 
         assert self.orchestrator is not None
@@ -154,7 +143,6 @@ class AgentBenchRuntime:
             ("aggregator", self.aggregator.run()),
         ]
 
-        # Start service tasks
         self._tasks = [
             asyncio.create_task(coroutine, name=name) for name, coroutine in service_coroutines
         ]
@@ -162,10 +150,8 @@ class AgentBenchRuntime:
         logger.info("All services started")
 
     async def stop(self) -> None:
-        """Stop all services gracefully."""
         logger.info("Stopping AgentBench services...")
 
-        # Stop services
         if self.orchestrator:
             await self.orchestrator.stop()
         if self.dispatcher:
@@ -175,7 +161,6 @@ class AgentBenchRuntime:
         if self.aggregator:
             await self.aggregator.stop()
 
-        # Cancel tasks
         for task in self._tasks:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -184,8 +169,6 @@ class AgentBenchRuntime:
         logger.info("All services stopped")
 
     async def run(self) -> None:
-        """Main runtime loop."""
-        # Set up signal handlers FIRST, before any initialization
         self._setup_signal_handlers()
 
         try:
@@ -193,33 +176,25 @@ class AgentBenchRuntime:
             await self.start()
         except Exception:
             logger.exception("Failed to initialize or start services")
-            # Ensure logs are flushed before exit
             logging.shutdown()
             raise
 
         logger.info("AgentBench runtime running. Press Ctrl+C to stop.")
 
         try:
-            # Wait for shutdown signal
             await self._shutdown_event.wait()
         except asyncio.CancelledError:
             logger.info("Runtime cancelled, shutting down...")
         finally:
-            # Stop gracefully
             await self.stop()
 
 
 async def main() -> None:
-    """Main entry point."""
     runtime = AgentBenchRuntime()
     await runtime.run()
 
 
 def _main_entry_point() -> None:
-    """Synchronous entry point for the application.
-
-    Handles the asyncio.run() call with proper error handling.
-    """
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
