@@ -164,13 +164,14 @@ api *args:
 services-bg:
     @just _status "Starting services in background..."
     @mkdir -p /tmp/{{ PROJECT_NAME }}
-    @pkill -f "python -m agentbench.main" 2>/dev/null || true
-    @pkill -f "python start_api.py" 2>/dev/null || true
+    @PIDFILE_RT=/tmp/{{ PROJECT_NAME }}/runtime.pid; PIDFILE_API=/tmp/{{ PROJECT_NAME }}/api.pid; \
+        if [ -f "$PIDFILE_RT" ] && kill -0 "$(cat "$PIDFILE_RT")" 2>/dev/null; then kill "$(cat "$PIDFILE_RT")" 2>/dev/null || true; rm -f "$PIDFILE_RT"; fi; \
+        if [ -f "$PIDFILE_API" ] && kill -0 "$(cat "$PIDFILE_API")" 2>/dev/null; then kill "$(cat "$PIDFILE_API")" 2>/dev/null || true; rm -f "$PIDFILE_API"; fi
     @sleep 1
     @just _status "Starting runtime..."
-    @nohup uv run python -m agentbench.main > /tmp/{{ PROJECT_NAME }}/runtime.log 2>&1 &
+    @nohup uv run python -m agentbench.main > /tmp/{{ PROJECT_NAME }}/runtime.log 2>&1 & echo $! > /tmp/{{ PROJECT_NAME }}/runtime.pid
     @just _status "Starting API..."
-    @nohup uv run python start_api.py > /tmp/{{ PROJECT_NAME }}/api.log 2>&1 &
+    @nohup uv run python start_api.py > /tmp/{{ PROJECT_NAME }}/api.log 2>&1 & echo $! > /tmp/{{ PROJECT_NAME }}/api.pid
     @sleep 2
     @just _wait-for-service localhost {{ API_PORT }} 30 || (just _error "API failed to start. Check /tmp/{{ PROJECT_NAME }}/api.log"; exit 1)
     @just _status "Services running. Logs: /tmp/{{ PROJECT_NAME }}/"
@@ -179,8 +180,9 @@ services-bg:
 [group('app')]
 services-stop:
     @just _status "Stopping background services..."
-    @pkill -f "python -m agentbench.main" 2>/dev/null || true
-    @pkill -f "python start_api.py" 2>/dev/null || true
+    @PIDFILE_RT=/tmp/{{ PROJECT_NAME }}/runtime.pid; PIDFILE_API=/tmp/{{ PROJECT_NAME }}/api.pid; \
+        if [ -f "$PIDFILE_RT" ] && kill -0 "$(cat "$PIDFILE_RT")" 2>/dev/null; then kill "$(cat "$PIDFILE_RT")" 2>/dev/null || true; fi; rm -f "$PIDFILE_RT"; \
+        if [ -f "$PIDFILE_API" ] && kill -0 "$(cat "$PIDFILE_API")" 2>/dev/null; then kill "$(cat "$PIDFILE_API")" 2>/dev/null || true; fi; rm -f "$PIDFILE_API"
     @just _status "Services stopped"
 
 # Development mode: start everything + watch logs
@@ -189,9 +191,7 @@ services-stop:
 [group('dev')]
 dev: start services-bg
     @just _status "Development mode active. Press Ctrl+C to stop."
-    @trap 'just services-stop; exit 0' INT
-    @tail -f /tmp/{{ PROJECT_NAME }}/*.log 2>/dev/null || echo "No logs yet... waiting..."
-    @sleep infinity
+    @trap 'just services-stop; exit 0' INT; tail -f /tmp/{{ PROJECT_NAME }}/*.log 2>/dev/null || echo "No logs yet... waiting..."; sleep infinity
 
 # Health check all services
 [group('dev')]
