@@ -16,6 +16,8 @@ load_dotenv(Path(__file__).parent / ".env")
 import uvicorn  # noqa: E402
 
 from agentbench.api.app import app  # noqa: E402
+from agentbench.config import get_settings  # noqa: E402
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    settings = get_settings()
+    uvicorn.run(app, host=settings.api_host, port=settings.api_port, log_level="info")

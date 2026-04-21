@@ -468,10 +468,9 @@ class TestMainLoop:
                 "step_id": "s1_findings",
             },
         )
-        # Attach internal attributes expected by dispatcher
-        event._message_id = b"123-0"
-        event._stream = STREAM_EVAL_STEPS
-        event._consumer_group = "dispatcher"
+        event.delivery_message_id = "123-0"
+        event.delivery_stream = STREAM_EVAL_STEPS
+        event.delivery_consumer_group = "dispatcher"
 
         # Setup mocks for storage
         mock_mongo_storage.get_run.return_value = sample_run
@@ -522,7 +521,7 @@ class TestMainLoop:
             correlation_id="test-run-id",
             payload={"run_id": "test-run-id", "step_id": "s1"},
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         async def mock_consume(*args, **kwargs):
             yield event
@@ -546,7 +545,7 @@ class TestMainLoop:
             correlation_id="missing-run-id",
             payload={"run_id": "missing-run-id", "step_id": "s1"},
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         async def mock_consume(*args, **kwargs):
             yield event
@@ -572,7 +571,7 @@ class TestMainLoop:
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "s1"},
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         async def mock_consume(*args, **kwargs):
             yield event
@@ -599,7 +598,7 @@ class TestMainLoop:
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "nonexistent-step"},
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         # Workflow with different step
         workflow = WorkflowDefinition(
@@ -633,6 +632,60 @@ class TestMainLoop:
 
         # Should acknowledge even on error
         mock_event_bus.ack.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_continues_on_known_dispatch_value_error(
+        self, dispatcher, mock_event_bus, mock_mongo_storage, sample_run, sample_workflow
+    ):
+        """Known domain errors should be logged and acknowledged without killing the loop."""
+        event = EventEnvelope(
+            event_id=str(uuid.uuid4()),
+            event_type="workflow.step.dispatched",
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id=sample_run.run_id,
+            payload={"run_id": sample_run.run_id, "step_id": "s1_findings"},
+        )
+        event.delivery_message_id = "123-0"
+
+        async def mock_consume(*args, **kwargs):
+            yield event
+            dispatcher._running = False
+
+        mock_event_bus.consume = mock_consume
+        mock_mongo_storage.get_run.return_value = sample_run
+        mock_mongo_storage.get_workflow.return_value = sample_workflow
+
+        with patch.object(dispatcher, "_dispatch_step", side_effect=ValueError("Step not found")):
+            await dispatcher.run()
+
+        mock_event_bus.ack.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_re_raises_unexpected_dispatch_errors(
+        self, dispatcher, mock_event_bus, mock_mongo_storage, sample_run, sample_workflow
+    ):
+        """Unexpected dispatch errors should bubble instead of being treated as domain failures."""
+        event = EventEnvelope(
+            event_id=str(uuid.uuid4()),
+            event_type="workflow.step.dispatched",
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id=sample_run.run_id,
+            payload={"run_id": sample_run.run_id, "step_id": "s1_findings"},
+        )
+        event.delivery_message_id = "123-0"
+
+        async def mock_consume(*args, **kwargs):
+            yield event
+
+        mock_event_bus.consume = mock_consume
+        mock_mongo_storage.get_run.return_value = sample_run
+        mock_mongo_storage.get_workflow.return_value = sample_workflow
+
+        with (
+            patch.object(dispatcher, "_dispatch_step", side_effect=TypeError("bad payload")),
+            pytest.raises(TypeError, match="bad payload"),
+        ):
+            await dispatcher.run()
 
 
 class TestStop:

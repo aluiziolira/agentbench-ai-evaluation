@@ -520,7 +520,9 @@ class TestEventConsumption:
         envelope.event_type = AGENT_RESPONSE_RECEIVED
         envelope.payload = {"run_id": "run-001", "step_id": "s1", "latency_ms": 100}
         envelope.correlation_id = "run-001"
-        envelope._message_id = b"123-0"
+        envelope.delivery_message_id = "123-0"
+        envelope.delivery_stream = STREAM_EVAL_STEPS
+        envelope.delivery_consumer_group = "scoring"
 
         # Track calls to consume
         call_count = 0
@@ -551,7 +553,9 @@ class TestEventConsumption:
         envelope.event_type = "workflow.step.dispatched"
         envelope.payload = {"run_id": "run-001", "step_id": "s1"}
         envelope.correlation_id = "run-001"
-        envelope._message_id = b"123-0"
+        envelope.delivery_message_id = "123-0"
+        envelope.delivery_stream = STREAM_EVAL_STEPS
+        envelope.delivery_consumer_group = "scoring"
 
         call_count = 0
 
@@ -570,7 +574,7 @@ class TestEventConsumption:
         scoring_engine.event_bus.ack.assert_called_with(
             STREAM_EVAL_STEPS,
             "scoring",
-            b"123-0",
+            "123-0",
         )
 
 
@@ -612,7 +616,9 @@ class TestEventEmission:
             "latency_ms": 1000,
         }
         envelope.correlation_id = sample_run.run_id
-        envelope._message_id = b"123-0"
+        envelope.delivery_message_id = "123-0"
+        envelope.delivery_stream = STREAM_EVAL_STEPS
+        envelope.delivery_consumer_group = "scoring"
 
         call_count = 0
 
@@ -704,6 +710,106 @@ class TestDirectScoreResponse:
                     response_text=sample_agent_response,
                     latency_ms=1000,
                 )
+
+    @pytest.mark.asyncio
+    async def test_rescore_step_loads_stored_raw_io_and_overrides_strategy(
+        self, scoring_engine, sample_run, sample_workflow, sample_case, sample_agent_response
+    ):
+        """Test re-scoring a stored response through the direct scoring path."""
+        scoring_engine.mongo_storage.get_run.return_value = sample_run
+        scoring_engine.mongo_storage.get_workflow.return_value = sample_workflow
+
+        run_dir = scoring_engine.raw_io_dir / sample_run.run_id
+        run_dir.mkdir()
+        (run_dir / "s1_findings.json").write_text(
+            json.dumps(
+                {
+                    "run_id": sample_run.run_id,
+                    "step_id": "s1_findings",
+                    "response": sample_agent_response,
+                    "latency_ms": 4321,
+                }
+            )
+        )
+
+        with patch("agentbench.scoring.engine.load_case") as mock_load_case:
+            mock_load_case.return_value = sample_case
+
+            score = await scoring_engine.rescore_step(
+                run_id=sample_run.run_id,
+                step_id="s1_findings",
+                strategy="finding_match",
+            )
+
+        assert isinstance(score, StepScore)
+        assert score.run_id == sample_run.run_id
+        assert score.case_id == sample_run.case_id
+        assert score.step_id == "s1_findings"
+        assert score.strategy == "finding_match"
+        assert score.latency_ms == 4321
+
+    @pytest.mark.asyncio
+    async def test_rescore_step_overrides_rubric_for_llm_judge(
+        self, scoring_engine, sample_run, sample_workflow, sample_case
+    ):
+        """Test rubric override is passed through for llm_judge re-scoring."""
+        llm_step = sample_workflow.steps[0].model_copy(
+            update={
+                "scoring": sample_workflow.steps[0].scoring.model_copy(
+                    update={"strategy": "llm_judge", "rubric": "Original rubric"}
+                )
+            },
+            deep=True,
+        )
+        sample_workflow.steps = [llm_step]
+
+        scoring_engine.mongo_storage.get_run.return_value = sample_run
+        scoring_engine.mongo_storage.get_workflow.return_value = sample_workflow
+
+        run_dir = scoring_engine.raw_io_dir / sample_run.run_id
+        run_dir.mkdir()
+        (run_dir / "s1_findings.json").write_text(
+            json.dumps(
+                {
+                    "run_id": sample_run.run_id,
+                    "step_id": "s1_findings",
+                    "response": "summary text",
+                    "latency_ms": 222,
+                }
+            )
+        )
+
+        expected_score = StepScore(
+            run_id=sample_run.run_id,
+            case_id=sample_run.case_id,
+            step_id="s1_findings",
+            strategy="llm_judge",
+            raw_score=0.8,
+            weighted_score=0.8,
+            latency_ms=222,
+            passed=True,
+            details={"rubric": "Prioritize production risk"},
+        )
+
+        with (
+            patch("agentbench.scoring.engine.load_case") as mock_load_case,
+            patch.object(
+                scoring_engine, "_score_step", new=AsyncMock(return_value=expected_score)
+            ) as mock_score_step,
+        ):
+            mock_load_case.return_value = sample_case
+
+            score = await scoring_engine.rescore_step(
+                run_id=sample_run.run_id,
+                step_id="s1_findings",
+                strategy="llm_judge",
+                rubric="Prioritize production risk",
+            )
+
+        scored_step = mock_score_step.await_args.kwargs["step"]
+        assert scored_step.scoring.strategy == "llm_judge"
+        assert scored_step.scoring.rubric == "Prioritize production risk"
+        assert score == expected_score
 
 
 class TestStrategyRegistry:

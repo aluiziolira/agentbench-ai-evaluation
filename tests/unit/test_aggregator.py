@@ -672,7 +672,7 @@ class TestAggregatorLifecycle:
                 "details": {},
             },
         )
-        score_event._message_id = b"msg-1"
+        score_event.delivery_message_id = "msg-1"
 
         # Mock the consume method to yield one event then stop
         async def mock_consume(*args, **kwargs):
@@ -687,6 +687,82 @@ class TestAggregatorLifecycle:
 
         # Assert
         assert len(aggregator.get_accumulated_scores("run-1")) == 1
+
+    async def test_run_loop_retries_known_validation_failures(self, aggregator, mock_event_bus):
+        """Known validation failures should be logged and retried without crashing the loop."""
+        invalid_event = EventEnvelope(
+            event_id="evt-invalid",
+            event_type=STEP_SCORED,
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id="run-1",
+            payload={
+                "run_id": "run-1",
+                "case_id": "case-1",
+                "step_id": "s1_findings",
+                "strategy": "finding_match",
+                "raw_score": "bad-score",
+                "weighted_score": 1.7,
+                "latency_ms": 500,
+                "passed": True,
+                "details": {},
+            },
+        )
+
+        consume_calls = 0
+
+        async def mock_consume(*args, **kwargs):
+            nonlocal consume_calls
+            consume_calls += 1
+            if consume_calls == 1:
+                yield invalid_event
+            else:
+                aggregator._running = False
+                return
+
+        mock_event_bus.consume = mock_consume
+
+        await aggregator.run()
+
+        assert aggregator.get_accumulated_scores("run-1") == []
+
+    async def test_run_loop_re_raises_unexpected_errors(self, aggregator, mock_event_bus):
+        """Unexpected errors should escape instead of being swallowed forever."""
+        score_event = EventEnvelope(
+            event_id="evt-1",
+            event_type=STEP_SCORED,
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id="run-1",
+            payload={
+                "run_id": "run-1",
+                "case_id": "case-1",
+                "step_id": "s1_findings",
+                "strategy": "finding_match",
+                "raw_score": 0.85,
+                "weighted_score": 1.7,
+                "latency_ms": 500,
+                "passed": True,
+                "details": {},
+            },
+        )
+
+        consume_calls = 0
+
+        async def mock_consume(*args, **kwargs):
+            nonlocal consume_calls
+            consume_calls += 1
+            if consume_calls == 1:
+                yield score_event
+            else:
+                aggregator._running = False
+                return
+
+        mock_event_bus.consume = mock_consume
+
+        with (
+            patch.object(aggregator, "_handle_step_scored", side_effect=RuntimeError("boom")),
+            pytest.raises(RuntimeError, match="boom"),
+        ):
+            await aggregator.run()
 
 
 class TestUtilityMethods:

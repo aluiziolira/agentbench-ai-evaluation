@@ -10,6 +10,7 @@ from typing import Any, cast
 
 # CRITICAL: Must import redis at module level for exception handling
 import redis.asyncio as redis_module
+from pydantic import ValidationError
 
 from agentbench.events.types import (
     STREAM_KEYS,
@@ -21,6 +22,7 @@ from agentbench.events.types import (
 
 logger = logging.getLogger(__name__)
 type RedisField = bytes | bytearray | memoryview[int] | str | int | float
+HANDLED_EVENT_DESERIALIZATION_ERRORS = (json.JSONDecodeError, ValidationError, ValueError)
 
 
 class EventBus:
@@ -72,7 +74,7 @@ class EventBus:
                 },
             )
             return cast(str, message_id)
-        except Exception as e:
+        except redis_module.RedisError as e:
             self._logger.error(
                 "Failed to publish event",
                 extra={
@@ -122,9 +124,13 @@ class EventBus:
                     for message_id, fields in entries:
                         try:
                             event = self._deserialize_event(fields)
-                            event.__dict__["_message_id"] = message_id
-                            event.__dict__["_stream"] = stream
-                            event.__dict__["_consumer_group"] = consumer_group
+                            event.delivery_message_id = (
+                                message_id.decode()
+                                if isinstance(message_id, bytes)
+                                else str(message_id)
+                            )
+                            event.delivery_stream = stream
+                            event.delivery_consumer_group = consumer_group
 
                             self._logger.info(
                                 "Consuming event",
@@ -140,7 +146,7 @@ class EventBus:
 
                             yield event
 
-                        except Exception as e:
+                        except HANDLED_EVENT_DESERIALIZATION_ERRORS as e:
                             self._logger.error(
                                 "Failed to deserialize event",
                                 extra={
@@ -150,24 +156,12 @@ class EventBus:
                                     "fields": fields,
                                 },
                             )
-                            with contextlib.suppress(Exception):
+                            with contextlib.suppress(redis_module.RedisError):
                                 await self._redis.xack(stream, consumer_group, message_id)
 
             except redis_module.RedisError as e:
                 self._logger.error(
                     "Redis error in consume loop",
-                    extra={
-                        "stream": stream,
-                        "consumer_group": consumer_group,
-                        "error": str(e),
-                    },
-                )
-                import asyncio
-
-                await asyncio.sleep(1)
-            except Exception as e:
-                self._logger.error(
-                    "Unexpected error in consume loop",
                     extra={
                         "stream": stream,
                         "consumer_group": consumer_group,
@@ -207,7 +201,7 @@ class EventBus:
                 },
             )
             return cast(int, result)
-        except Exception as e:
+        except redis_module.RedisError as e:
             self._logger.error(
                 "Failed to acknowledge message",
                 extra={

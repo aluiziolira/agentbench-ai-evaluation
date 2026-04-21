@@ -2,15 +2,16 @@
 
 import asyncio
 import json
-import os
 import time
 from pathlib import Path
 
+import httpx
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from agentbench.cases.loader import list_enabled_cases, load_manifest
+from agentbench.config import get_settings
 from agentbench.models.results import BenchmarkReport
 from cli.reporting import (
     compute_insights,
@@ -33,11 +34,12 @@ def run(
     ),
     watch: bool = typer.Option(False, "--watch", help="Watch for completion and show report"),
     demo: bool = typer.Option(False, "--demo", help="Demo mode - enhanced visuals"),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
+    api_url: str | None = typer.Option(None, "--api-url", help="API URL"),
 ) -> None:
     import uuid
 
-    import httpx
+    if api_url is None:
+        api_url = get_settings().api_base_url
 
     benchmark_id = str(uuid.uuid4())
 
@@ -60,7 +62,7 @@ def run(
         result = response.json()
         benchmark_id = result["benchmark_id"]
         console.print(f"[bold green]Benchmark started: {benchmark_id}[/]")
-    except Exception as e:
+    except httpx.HTTPError as e:
         console.print(f"[bold red]Error: {e}[/]")
         raise typer.Exit(1) from None
 
@@ -77,7 +79,7 @@ def report(
     demo: bool = typer.Option(
         False, "--demo", "-d", help="Demo mode - enhanced visuals for presentations"
     ),
-    api_url: str = typer.Option("http://localhost:8000", "--api-url", help="API URL"),
+    api_url: str | None = typer.Option(None, "--api-url", help="API URL"),
 ) -> None:
     """Get benchmark report.
 
@@ -91,7 +93,8 @@ def report(
         # Watch mode with demo visuals
         uv run python -m cli.main report {benchmark_id} --watch --demo
     """
-    import httpx
+    if api_url is None:
+        api_url = get_settings().api_base_url
 
     if demo:
         console.print(f"[bold bright_blue]🚀 Loading demo report for {benchmark_id}...[/]")
@@ -144,7 +147,7 @@ def report(
                     from cli.reporting_demo import render_full_demo_report
 
                     render_full_demo_report(report, console, show_per_case=per_case)
-                except Exception as demo_exc:
+                except (ImportError, ValueError) as demo_exc:
                     console.print(
                         f"[yellow]Demo renderer unavailable ({demo_exc}), falling back to standard report.[/]"
                     )
@@ -189,7 +192,7 @@ def report(
 
             break
 
-        except Exception as e:
+        except (httpx.HTTPError, ValueError) as e:
             console.print(f"[bold red]Error: {e}[/]")
             raise typer.Exit(1) from None
 
@@ -227,16 +230,14 @@ def list_cases(
     except FileNotFoundError:
         console.print(f"[bold red]Case set not found: {case_set}[/]")
         raise typer.Exit(1) from None
-    except Exception as e:
+    except ValueError as e:
         console.print(f"[bold red]Error: {e}[/]")
         raise typer.Exit(1) from None
 
 
 @app.command()
 def seed(
-    mongo_uri: str = typer.Option(
-        os.getenv("MONGODB_URI", "mongodb://localhost:27017"), "--mongo-uri", help="MongoDB URI"
-    ),
+    mongo_uri: str | None = typer.Option(None, "--mongo-uri", help="MongoDB URI"),
     fixtures_dir: Path = typer.Option(  # noqa: B008
         Path("fixtures/pr_review"), "--fixtures-dir", help="Fixtures directory"
     ),
@@ -244,8 +245,14 @@ def seed(
     from agentbench.models import WorkflowDefinition
     from agentbench.storage.mongo import MongoStorage
 
+    settings = get_settings()
+    if mongo_uri is None:
+        mongo_uri = settings.mongodb_uri
+
     async def do_seed() -> None:
-        mongo = MongoStorage(mongo_uri, "agentbench")
+        from pymongo.errors import DuplicateKeyError
+
+        mongo = MongoStorage(mongo_uri, settings.mongodb_db)
         await mongo.setup_indexes()
 
         # Load and register workflow
@@ -259,7 +266,7 @@ def seed(
             try:
                 await mongo.create_workflow(workflow)
                 console.print(f"[green]Created workflow: {workflow.workflow_id}[/]")
-            except Exception as e:
+            except DuplicateKeyError as e:
                 console.print(f"[yellow]Workflow may already exist: {e}[/]")
 
         console.print("[bold green]Database seeded successfully![/]")
@@ -275,13 +282,33 @@ def rescore(
     rubric: str | None = typer.Option(None, "--rubric", help="Scoring rubric"),
 ) -> None:
     """Re-score a step with different parameters."""
+    from agentbench.scoring.engine import RawIONotFoundError, ScoringEngine
+    from agentbench.storage.mongo import MongoStorage
+
     console.print(f"[bold blue]Re-scoring run {run_id}, step {step}...[/]")
     console.print(f"Strategy: {strategy}")
     if rubric:
         console.print(f"Rubric: {rubric}")
 
-    # Implementation would load raw I/O and re-score
-    console.print("[yellow]Re-scoring not yet fully implemented[/]")
+    async def do_rescore() -> None:
+        settings = get_settings()
+        mongo = MongoStorage(settings.mongodb_uri, settings.mongodb_db)
+        engine = ScoringEngine(event_bus=None, mongo_storage=mongo)  # type: ignore[arg-type]
+        score = await engine.rescore_step(
+            run_id=run_id,
+            step_id=step,
+            strategy=strategy,
+            rubric=rubric,
+        )
+
+        console.print("[bold green]Re-scoring complete[/]")
+        console.print_json(data=score.model_dump() if hasattr(score, "model_dump") else score)
+
+    try:
+        asyncio.run(do_rescore())
+    except (RawIONotFoundError, ValueError, FileNotFoundError) as e:
+        console.print(f"[bold red]Error: {e}[/]")
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -292,14 +319,20 @@ def version() -> None:
 
 @app.command()
 def serve(
-    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
-    port: int = typer.Option(8000, "--port", "-p", help="Port to bind to"),
+    host: str | None = typer.Option(None, "--host", "-h", help="Host to bind to"),
+    port: int | None = typer.Option(None, "--port", "-p", help="Port to bind to"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
 ) -> None:
     """Start the AgentBench API server."""
     import uvicorn
 
     from agentbench.api.app import app as api_app
+
+    settings = get_settings()
+    if host is None:
+        host = settings.api_host
+    if port is None:
+        port = settings.api_port
 
     console.print(f"[bold blue]Starting AgentBench API server on {host}:{port}...[/]")
     uvicorn.run(api_app, host=host, port=port, reload=reload)

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentbench.main import AgentBenchRuntime
+from agentbench.main import AgentBenchRuntime, _main_entry_point, main
 
 
 async def _pending_task() -> None:
@@ -103,6 +103,37 @@ class TestRuntimeInitialization:
             mock_storage._get_client = AsyncMock(return_value=mock_client)
             client = await mock_storage._get_client()
             assert client == mock_client
+
+    @pytest.mark.asyncio
+    async def test_initialize_uses_env_driven_storage_settings(self, monkeypatch):
+        """Runtime initialization should read MongoDB and Redis settings from env."""
+        runtime = AgentBenchRuntime()
+
+        monkeypatch.setenv("MONGODB_URI", "mongodb://mongo-from-env:27017")
+        monkeypatch.setenv("MONGODB_DB", "agentbench_runtime_test")
+        monkeypatch.setenv("REDIS_URL", "redis://redis-from-env:6379/5")
+
+        mock_mongo = AsyncMock()
+        mock_mongo.setup_indexes = AsyncMock()
+
+        mock_redis = AsyncMock()
+        mock_redis._get_client = AsyncMock(return_value=AsyncMock())
+
+        with (
+            patch("agentbench.main.MongoStorage", return_value=mock_mongo) as mock_mongo_cls,
+            patch("agentbench.main.RedisStorage", return_value=mock_redis) as mock_redis_cls,
+            patch("agentbench.main.EventBus", return_value=MagicMock()),
+            patch("agentbench.main.Orchestrator", return_value=AsyncMock()),
+            patch("agentbench.main.StepDispatcher", return_value=AsyncMock()),
+            patch("agentbench.main.ScoringEngine", return_value=AsyncMock()),
+            patch("agentbench.main.Aggregator", return_value=AsyncMock()),
+        ):
+            await runtime.initialize()
+
+        mock_mongo_cls.assert_called_once_with(
+            "mongodb://mongo-from-env:27017", "agentbench_runtime_test"
+        )
+        mock_redis_cls.assert_called_once_with(redis_url="redis://redis-from-env:6379/5")
 
 
 class TestServiceStartup:
@@ -361,3 +392,35 @@ class TestErrorHandling:
         finally:
             runtime._tasks = []
             await runtime.stop()
+
+    @pytest.mark.asyncio
+    async def test_main_does_not_add_duplicate_fatal_logging(self):
+        """main() should let runtime errors bubble without a second generic log layer."""
+        with (
+            patch("agentbench.main.AgentBenchRuntime") as mock_runtime_cls,
+            patch("agentbench.main.logger") as mock_logger,
+        ):
+            mock_runtime = AsyncMock()
+            mock_runtime.run = AsyncMock(side_effect=RuntimeError("boom"))
+            mock_runtime_cls.return_value = mock_runtime
+
+            with pytest.raises(RuntimeError, match="boom"):
+                await main()
+
+        mock_logger.error.assert_not_called()
+
+    def test_main_entry_point_exits_non_zero_on_runtime_error(self):
+        """The synchronous entry point should still exit 1 for fatal runtime failures."""
+
+        def fail_run(coro):
+            coro.close()
+            raise RuntimeError("fatal boom")
+
+        with (
+            patch("agentbench.main.asyncio.run", side_effect=fail_run),
+            patch("agentbench.main.sys.exit", side_effect=SystemExit(1)) as mock_exit,
+            pytest.raises(SystemExit, match="1"),
+        ):
+            _main_entry_point()
+
+        mock_exit.assert_called_once_with(1)

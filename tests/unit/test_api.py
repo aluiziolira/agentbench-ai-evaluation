@@ -88,6 +88,35 @@ class TestHealthEndpoint:
         assert response.status_code == 200
         assert response.json() == {"status": "healthy"}
 
+    def test_lifespan_uses_env_driven_storage_settings(self, monkeypatch):
+        """API lifespan should build storage clients from shared env settings."""
+        mock_mongo_storage = MagicMock()
+        mock_mongo_storage.setup_indexes = AsyncMock()
+
+        mock_redis_storage = MagicMock()
+        mock_redis_storage._get_client = AsyncMock(return_value=AsyncMock())
+
+        monkeypatch.setenv("MONGODB_URI", "mongodb://api-env-host:27017")
+        monkeypatch.setenv("MONGODB_DB", "agentbench_api_test")
+        monkeypatch.setenv("REDIS_URL", "redis://api-env-host:6379/7")
+
+        with (
+            patch(
+                "agentbench.api.app.MongoStorage", return_value=mock_mongo_storage
+            ) as mock_mongo_cls,
+            patch(
+                "agentbench.api.app.RedisStorage", return_value=mock_redis_storage
+            ) as mock_redis_cls,
+            patch("agentbench.api.app.EventBus", return_value=MagicMock()),
+            TestClient(app),
+        ):
+            pass
+
+        mock_mongo_cls.assert_called_once_with(
+            "mongodb://api-env-host:27017", "agentbench_api_test"
+        )
+        mock_redis_cls.assert_called_once_with(redis_url="redis://api-env-host:6379/7")
+
 
 class TestCreateBenchmark:
     """Tests for creating benchmarks."""
@@ -393,7 +422,7 @@ class TestRegisterWorkflow:
         assert response.json()["detail"] == "Workflow already exists"
 
     def test_register_workflow_generic_error(self, test_client, mock_mongo_storage):
-        """Test generic error returns 400 with sanitized message, not internal details."""
+        """Unexpected create errors should bubble once the route only handles typed storage failures."""
         # Arrange
         mock_mongo_storage.create_workflow.side_effect = RuntimeError(
             "connection refused to mongodb://internal-host:27017"
@@ -408,13 +437,8 @@ class TestRegisterWorkflow:
             "created_at": datetime.now(UTC).isoformat(),
         }
 
-        # Act
-        response = test_client.post("/workflows", json=workflow_data)
-
-        # Assert - must not leak internal error
-        assert response.status_code == 400
-        assert response.json()["detail"] == "Invalid workflow operation"
-        assert "mongodb" not in response.json()["detail"].lower()
+        with pytest.raises(RuntimeError, match="connection refused"):
+            test_client.post("/workflows", json=workflow_data)
 
 
 class TestGetWorkflow:
@@ -514,16 +538,11 @@ class TestPublishWorkflow:
         assert response.json()["detail"] == "Workflow version is already published"
 
     def test_publish_workflow_generic_error(self, test_client, mock_mongo_storage):
-        """Test generic publish error returns 400 with sanitized message."""
+        """Unexpected publish errors should bubble once only typed workflow exceptions are handled."""
         # Arrange
         mock_mongo_storage.publish_workflow.side_effect = RuntimeError(
             "timeout after 30000ms on shard xyz"
         )
 
-        # Act
-        response = test_client.post("/workflows/wf_test_v1/publish?version=1.0.0")
-
-        # Assert - must not leak internal error
-        assert response.status_code == 400
-        assert response.json()["detail"] == "Invalid workflow operation"
-        assert "shard" not in response.json()["detail"].lower()
+        with pytest.raises(RuntimeError, match="timeout after 30000ms"):
+            test_client.post("/workflows/wf_test_v1/publish?version=1.0.0")

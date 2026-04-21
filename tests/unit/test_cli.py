@@ -1,7 +1,9 @@
 """Unit tests for AgentBench CLI."""
 
 import json
+import os
 import re
+import runpy
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -142,6 +144,20 @@ class TestListCasesCommand:
         assert result.exit_code == 1
         assert "Case set not found" in result.output
 
+    @patch("cli.main.load_manifest", side_effect=RuntimeError("boom"))
+    def test_list_cases_re_raises_unexpected_errors(self, mock_load_manifest, tmp_path):
+        """Unexpected list-cases failures should bubble instead of being flattened."""
+        fixtures_dir = tmp_path / "fixtures"
+        fixtures_dir.mkdir()
+
+        result = runner.invoke(
+            app,
+            ["list-cases", "--case-set", "pr_review_cases_v1", "--fixtures-dir", str(fixtures_dir)],
+        )
+
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "boom"
+
     def test_list_cases_wrong_case_set_id(self, tmp_path):
         """Test listing cases with mismatched case_set_id."""
         fixtures_dir = tmp_path / "fixtures"
@@ -225,13 +241,17 @@ class TestSeedCommand:
     @patch("json.load")
     def test_seed_handles_existing_workflow(self, mock_json_load, mock_mongo_class):
         """Test that seed command handles already-existing workflows gracefully."""
+        from pymongo.errors import DuplicateKeyError
+
         # Setup mocks
         mock_mongo = AsyncMock()
         mock_mongo_class.return_value = mock_mongo
         mock_mongo.setup_indexes = AsyncMock()
 
-        # Create workflow raises exception (already exists)
-        mock_mongo.create_workflow = AsyncMock(side_effect=Exception("Workflow already exists"))
+        # Create workflow raises duplicate key error (already exists)
+        mock_mongo.create_workflow = AsyncMock(
+            side_effect=DuplicateKeyError("Workflow already exists")
+        )
 
         workflow_data = {
             "workflow_id": "wf_pr_review_v1",
@@ -338,7 +358,9 @@ class TestRunCommand:
     def test_run_handles_api_error(self, mock_post):
         """Test that run command handles API errors gracefully."""
         # Setup mock to raise exception
-        mock_post.side_effect = Exception("Connection refused")
+        import httpx
+
+        mock_post.side_effect = httpx.ConnectError("Connection refused")
 
         result = runner.invoke(
             app,
@@ -354,6 +376,27 @@ class TestRunCommand:
         )
         assert result.exit_code == 1
         assert "Error: Connection refused" in result.output
+
+    @patch("httpx.post")
+    def test_run_re_raises_unexpected_errors(self, mock_post):
+        """Unexpected CLI errors should not be coerced into a generic exit path."""
+        mock_post.side_effect = RuntimeError("boom")
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--workflow",
+                "wf_pr_review_v1",
+                "--case-set",
+                "pr_review_cases_v1",
+                "--agents",
+                "gpt-4o-mini",
+            ],
+        )
+
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "boom"
 
 
 class TestReportCommand:
@@ -394,6 +437,16 @@ class TestReportCommand:
         assert result.exit_code == 0
         assert "Benchmark in progress" in result.output
         assert "Use --watch to wait for completion" in result.output
+
+    @patch("httpx.get")
+    def test_report_re_raises_unexpected_errors(self, mock_get):
+        """Unexpected report failures should bubble instead of looking like typed CLI errors."""
+        mock_get.side_effect = RuntimeError("boom")
+
+        result = runner.invoke(app, ["report", "bench-123"])
+
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "boom"
 
     @patch("cli.main.time.sleep")
     @patch("httpx.get")
@@ -587,8 +640,28 @@ class TestPerCaseFlag:
 class TestRescoreCommand:
     """Tests for the rescore command."""
 
-    def test_rescore_shows_message(self):
-        """Test that rescore command shows appropriate message."""
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_scores_stored_response(self, mock_mongo_class, mock_engine_class):
+        """Test successful re-scoring uses stored run data and prints the score."""
+        mock_mongo = MagicMock()
+        mock_mongo_class.return_value = mock_mongo
+
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock()
+        mock_engine.rescore_step.return_value = {
+            "run_id": "run-123",
+            "case_id": "pr_001_missing_auth_check",
+            "step_id": "s1_findings",
+            "strategy": "llm_judge",
+            "raw_score": 0.75,
+            "weighted_score": 1.5,
+            "latency_ms": 1200,
+            "passed": True,
+            "details": {"rubric": "Test rubric"},
+        }
+        mock_engine_class.return_value = mock_engine
+
         result = runner.invoke(
             app,
             [
@@ -603,14 +676,66 @@ class TestRescoreCommand:
                 "Test rubric",
             ],
         )
+
         assert result.exit_code == 0
         assert "Re-scoring run run-123, step s1_findings" in result.output
         assert "Strategy: llm_judge" in result.output
         assert "Rubric: Test rubric" in result.output
-        assert "Re-scoring not yet fully implemented" in result.output
+        assert "Re-scoring complete" in result.output
+        assert '"weighted_score": 1.5' in result.output
+        mock_engine.rescore_step.assert_awaited_once_with(
+            run_id="run-123",
+            step_id="s1_findings",
+            strategy="llm_judge",
+            rubric="Test rubric",
+        )
 
-    def test_rescore_without_rubric(self):
-        """Test that rescore command works without optional rubric."""
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_fails_for_invalid_step(self, mock_mongo_class, mock_engine_class):
+        """Test invalid re-score combinations fail loudly."""
+        mock_mongo_class.return_value = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock(side_effect=ValueError("Step not found: missing_step"))
+        mock_engine_class.return_value = mock_engine
+
+        result = runner.invoke(
+            app,
+            [
+                "rescore",
+                "--run-id",
+                "run-123",
+                "--step",
+                "missing_step",
+                "--strategy",
+                "finding_match",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Error: Step not found: missing_step" in result.output
+
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_without_rubric(self, mock_mongo_class, mock_engine_class):
+        """Test rubric remains optional for non-LLM re-scoring."""
+        mock_mongo_class.return_value = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock(
+            return_value={
+                "run_id": "run-123",
+                "case_id": "pr_001_missing_auth_check",
+                "step_id": "s1_findings",
+                "strategy": "finding_match",
+                "raw_score": 1.0,
+                "weighted_score": 2.0,
+                "latency_ms": 900,
+                "passed": True,
+                "details": {},
+            }
+        )
+        mock_engine_class.return_value = mock_engine
+
         result = runner.invoke(
             app,
             [
@@ -623,10 +748,72 @@ class TestRescoreCommand:
                 "finding_match",
             ],
         )
+
         assert result.exit_code == 0
         assert "Strategy: finding_match" in result.output
-        # No rubric should be printed
         assert "Rubric:" not in result.output
+        mock_engine.rescore_step.assert_awaited_once_with(
+            run_id="run-123",
+            step_id="s1_findings",
+            strategy="finding_match",
+            rubric=None,
+        )
+
+
+class TestServeCommand:
+    """Tests for the serve command."""
+
+    @patch("uvicorn.run")
+    def test_serve_uses_api_port_from_env_by_default(self, mock_run, monkeypatch):
+        """Serve should use API_PORT when no --port override is provided."""
+        monkeypatch.setenv("API_PORT", "8011")
+
+        result = runner.invoke(app, ["serve"])
+
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["port"] == 8011
+
+    @patch("httpx.post")
+    def test_run_uses_env_driven_api_port_for_default_url(self, mock_post, monkeypatch):
+        """Run should build its default API URL from API_PORT."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"benchmark_id": "bench-123"}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        monkeypatch.setenv("API_PORT", "8011")
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--workflow",
+                "wf_pr_review_v1",
+                "--case-set",
+                "pr_review_cases_v1",
+                "--agents",
+                "gpt-4o-mini",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert mock_post.call_args.args[0] == "http://localhost:8011/benchmarks"
+
+
+class TestStartAPIEntrypoint:
+    """Tests for the standalone API entrypoint."""
+
+    @patch.dict(os.environ, {"API_PORT": "8011", "API_HOST": "127.0.0.1"}, clear=False)
+    @patch("uvicorn.run")
+    @patch("agentbench.api.app.app", new=MagicMock(name="api_app"))
+    def test_start_api_uses_env_driven_host_and_port(self, mock_run):
+        """start_api.py should read API host and port from env-backed settings."""
+        runpy.run_module("start_api", run_name="__main__")
+
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["host"] == "127.0.0.1"
+        assert mock_run.call_args.kwargs["port"] == 8011
 
 
 class TestCLIHelp:

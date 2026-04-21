@@ -11,7 +11,7 @@ Tests cover:
 
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -591,7 +591,7 @@ class TestMainLoop:
                 "agents": ["gpt-4o-mini"],
             },
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         async def mock_consume(*args, **kwargs):
             yield event
@@ -626,7 +626,7 @@ class TestMainLoop:
             correlation_id=sample_run.run_id,
             payload={"run_id": sample_run.run_id, "step_id": "s1_findings"},
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         async def mock_consume(*args, **kwargs):
             yield event
@@ -656,7 +656,7 @@ class TestMainLoop:
                 "agents": ["gpt-4o-mini"],
             },
         )
-        event._message_id = b"123-0"
+        event.delivery_message_id = "123-0"
 
         # Make workflow lookup fail
         mock_mongo_storage.get_workflow.side_effect = ValueError("Test error")
@@ -672,6 +672,76 @@ class TestMainLoop:
 
         # Should acknowledge even on error
         mock_event_bus.ack.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_eval_runs_consumer_fails_run_on_known_value_error(
+        self, orchestrator, mock_event_bus
+    ):
+        """Known domain errors should fail the run and keep the consumer alive."""
+        event = EventEnvelope(
+            event_id=str(uuid.uuid4()),
+            event_type=EVALUATION_RUN_REQUESTED,
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id="run-123",
+            payload={
+                "benchmark_id": "benchmark-001",
+                "workflow_id": "wf_pr_review_v1",
+                "case_set_id": "pr_review_cases_v1",
+                "agents": ["gpt-4o-mini"],
+                "run_id": "run-123",
+            },
+        )
+        event.delivery_message_id = "123-0"
+
+        async def mock_consume(*args, **kwargs):
+            yield event
+            orchestrator._running = False
+
+        mock_event_bus.consume = mock_consume
+        orchestrator._running = True
+
+        with (
+            patch.object(
+                orchestrator, "_handle_run_requested", side_effect=ValueError("bad workflow")
+            ),
+            patch.object(orchestrator, "_fail_run", new=AsyncMock()) as mock_fail_run,
+        ):
+            await orchestrator._consume_eval_runs()
+
+        mock_fail_run.assert_awaited_once_with("run-123", "Error processing event: bad workflow")
+        mock_event_bus.ack.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_eval_runs_consumer_re_raises_unexpected_errors(
+        self, orchestrator, mock_event_bus
+    ):
+        """Unexpected eval-run consumer errors should bubble for visibility."""
+        event = EventEnvelope(
+            event_id=str(uuid.uuid4()),
+            event_type=EVALUATION_RUN_REQUESTED,
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id="run-123",
+            payload={
+                "benchmark_id": "benchmark-001",
+                "workflow_id": "wf_pr_review_v1",
+                "case_set_id": "pr_review_cases_v1",
+                "agents": ["gpt-4o-mini"],
+                "run_id": "run-123",
+            },
+        )
+        event.delivery_message_id = "123-0"
+
+        async def mock_consume(*args, **kwargs):
+            yield event
+
+        mock_event_bus.consume = mock_consume
+        orchestrator._running = True
+
+        with (
+            patch.object(orchestrator, "_handle_run_requested", side_effect=TypeError("boom")),
+            pytest.raises(TypeError, match="boom"),
+        ):
+            await orchestrator._consume_eval_runs()
 
 
 # ============================================================================

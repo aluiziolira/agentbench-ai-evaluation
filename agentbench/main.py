@@ -6,7 +6,6 @@ Wires all services together in a single async process.
 import asyncio
 import contextlib
 import logging
-import os
 import signal
 import sys
 import traceback
@@ -18,6 +17,7 @@ import structlog
 from dotenv import load_dotenv
 
 from agentbench.aggregator.aggregator import Aggregator
+from agentbench.config import get_settings
 from agentbench.dispatcher.dispatcher import StepDispatcher
 from agentbench.events.bus import EventBus
 from agentbench.orchestrator.orchestrator import Orchestrator
@@ -91,17 +91,13 @@ class AgentBenchRuntime:
     async def initialize(self) -> None:
         """Initialize all services."""
         logger.info("Initializing AgentBench runtime...")
+        settings = get_settings()
 
-        # Storage - use environment variables with defaults
-        mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
-        db_name = os.environ.get("MONGODB_DB", "agentbench")
-
-        self.mongo_storage = MongoStorage(mongo_uri, db_name)
+        self.mongo_storage = MongoStorage(settings.mongodb_uri, settings.mongodb_db)
         await self.mongo_storage.setup_indexes()
         logger.info("MongoDB storage initialized")
 
-        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
-        self.redis_storage = RedisStorage(redis_url=redis_url)
+        self.redis_storage = RedisStorage(redis_url=settings.redis_url)
         # Ensure Redis client is connected
         _ = await self.redis_storage._get_client()
         logger.info("Redis storage initialized")
@@ -216,14 +212,7 @@ class AgentBenchRuntime:
 async def main() -> None:
     """Main entry point."""
     runtime = AgentBenchRuntime()
-    try:
-        await runtime.run()
-    except Exception as e:
-        # Log the full traceback for debugging
-        logger.error(f"Fatal error in main: {e}")
-        logger.error(f"Traceback:\n{traceback.format_exc()}")
-        # Re-raise to exit with non-zero code
-        raise
+    await runtime.run()
 
 
 def _main_entry_point() -> None:

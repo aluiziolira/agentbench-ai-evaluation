@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 EVALUATION_RUN_REQUESTED = "evaluation.run.requested"
 EVALUATION_RUN_STARTED = "evaluation.run.started"
@@ -34,3 +34,6 @@ class EventEnvelope(BaseModel):
     timestamp: str
     correlation_id: str
     payload: dict[str, Any]
+    delivery_message_id: str | None = Field(default=None, exclude=True)
+    delivery_stream: str | None = Field(default=None, exclude=True)
+    delivery_consumer_group: str | None = Field(default=None, exclude=True)

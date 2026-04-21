@@ -14,6 +14,7 @@ Service contract:
 """
 
 import asyncio
+import json
 import logging
 import os
 import uuid
@@ -21,6 +22,8 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+import redis.asyncio as redis_module
+from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 
 from agentbench.cases.loader import load_case, resolve_case_topic
@@ -40,6 +43,14 @@ from agentbench.storage.mongo import MongoStorage
 from agentbench.storage.redis_client import RedisStorage
 
 logger = logging.getLogger(__name__)
+
+HANDLED_AGGREGATOR_ERRORS = (
+    redis_module.RedisError,
+    ValidationError,
+    ValueError,
+    FileNotFoundError,
+    json.JSONDecodeError,
+)
 
 
 class Aggregator:
@@ -312,8 +323,6 @@ class Aggregator:
                 f"Run report already exists for {run_id}, treating as idempotent",
                 extra={"correlation_id": run_id, "run_id": run_id},
             )
-        except Exception:
-            raise
 
         # Mark run as completed in Redis
         await self.redis_storage.mark_run_completed(benchmark_id, run_id)
@@ -387,8 +396,6 @@ class Aggregator:
                 f"Benchmark report already exists for {benchmark_id}, treating as idempotent",
                 extra={"correlation_id": benchmark_id, "benchmark_id": benchmark_id},
             )
-        except Exception:
-            raise
 
         # Emit report generated event
         event = EventEnvelope(
@@ -434,10 +441,23 @@ class Aggregator:
                         await self._handle_workflow_completed(envelope)
 
                     # Acknowledge the message
-                    message_id = envelope.__dict__.get("_message_id")
-                    if message_id:
-                        await self.event_bus.ack(STREAM_SCORES, "aggregator", message_id)
-            except Exception as e:
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_SCORES
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "aggregator"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
+            except HANDLED_AGGREGATOR_ERRORS as e:
                 logger.error(f"Error in aggregator: {e}", exc_info=True)
                 await asyncio.sleep(1)
 

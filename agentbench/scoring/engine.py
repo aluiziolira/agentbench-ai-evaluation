@@ -319,11 +319,22 @@ class ScoringEngine:
                     break
 
                 if envelope.event_type != AGENT_RESPONSE_RECEIVED:
-                    await self.event_bus.ack(
-                        STREAM_EVAL_STEPS,
-                        "scoring",
-                        envelope._message_id,  # type: ignore[attr-defined]
-                    )
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_EVAL_STEPS
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "scoring"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
                     continue
 
                 score = await self._process_response(envelope)
@@ -344,11 +355,22 @@ class ScoringEngine:
                     )
                     await self.event_bus.publish(STREAM_SCORES, event)
 
-                await self.event_bus.ack(
-                    STREAM_EVAL_STEPS,
-                    "scoring",
-                    envelope._message_id,  # type: ignore[attr-defined]
-                )
+                if envelope.delivery_message_id:
+                    delivery_stream = (
+                        envelope.delivery_stream
+                        if isinstance(envelope.delivery_stream, str)
+                        else STREAM_EVAL_STEPS
+                    )
+                    delivery_consumer_group = (
+                        envelope.delivery_consumer_group
+                        if isinstance(envelope.delivery_consumer_group, str)
+                        else "scoring"
+                    )
+                    await self.event_bus.ack(
+                        delivery_stream,
+                        delivery_consumer_group,
+                        envelope.delivery_message_id,
+                    )
 
         except Exception:
             logger.exception("Scoring engine main loop failed")
@@ -401,4 +423,65 @@ class ScoringEngine:
             case_id=run.case_id,
             latency_ms=latency_ms,
             case=case,
+        )
+
+    async def rescore_step(
+        self,
+        run_id: str,
+        step_id: str,
+        strategy: str,
+        rubric: str | None = None,
+    ) -> StepScore:
+        """Re-score a stored response directly from persisted run artifacts.
+
+        Loads the run and workflow from MongoDB, resolves the requested step,
+        reads the stored raw I/O response from disk, applies any strategy/rubric
+        overrides, and routes the result through ``score_response``.
+        """
+        if strategy not in self.STRATEGY_REGISTRY:
+            raise ValueError(f"Unknown scoring strategy: {strategy}")
+
+        run = await self.mongo_storage.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run not found: {run_id}")
+
+        workflow = await self.mongo_storage.get_workflow(run.workflow_id, run.workflow_version)
+        if workflow is None:
+            raise ValueError(
+                f"Workflow not found: {run.workflow_id} version {run.workflow_version}"
+            )
+
+        step = next(
+            (workflow_step for workflow_step in workflow.steps if workflow_step.step_id == step_id),
+            None,
+        )
+        if step is None:
+            raise ValueError(f"Step not found: {step_id}")
+
+        raw_io = self._load_raw_io(run_id, step_id)
+        response_text = raw_io.get("response")
+        if not isinstance(response_text, str):
+            raise ValueError(f"Stored response for run {run_id}, step {step_id} must be a string")
+
+        latency_ms = raw_io.get("latency_ms", 0)
+        if not isinstance(latency_ms, int):
+            raise ValueError(f"Stored latency for run {run_id}, step {step_id} must be an integer")
+
+        updated_step = step.model_copy(
+            update={
+                "scoring": step.scoring.model_copy(
+                    update={
+                        "strategy": strategy,
+                        "rubric": rubric if strategy == "llm_judge" else step.scoring.rubric,
+                    }
+                )
+            },
+            deep=True,
+        )
+
+        return await self.score_response(
+            run=run,
+            step=updated_step,
+            response_text=response_text,
+            latency_ms=latency_ms,
         )

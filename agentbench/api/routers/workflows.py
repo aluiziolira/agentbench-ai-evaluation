@@ -22,9 +22,6 @@ async def register_workflow(workflow: WorkflowDefinition, req: Request) -> dict[
         return {"workflow_id": workflow.workflow_id, "version": workflow.version}
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Workflow already exists") from None
-    except Exception as e:
-        logger.error(f"Failed to create workflow: {e}")
-        raise HTTPException(status_code=400, detail="Invalid workflow operation") from None
 
 
 @router.get("/{workflow_id}")
@@ -53,6 +50,3 @@ async def publish_workflow(workflow_id: str, version: str, req: Request) -> dict
         raise HTTPException(
             status_code=409, detail="Workflow version is already published"
         ) from None
-    except Exception as e:
-        logger.error(f"Failed to publish workflow: {e}")
-        raise HTTPException(status_code=400, detail="Invalid workflow operation") from None

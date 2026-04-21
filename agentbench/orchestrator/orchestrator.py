@@ -20,6 +20,7 @@ Behavior:
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_FIXTURES_DIR = Path("fixtures/pr_review")
+HANDLED_ORCHESTRATOR_ERRORS = (ValueError, FileNotFoundError, json.JSONDecodeError)
 
 
 class Orchestrator:
@@ -414,95 +416,105 @@ class Orchestrator:
 
     async def _consume_eval_runs(self) -> None:
         """Consume events from stream:eval-runs."""
-        try:
-            async for envelope in self.event_bus.consume(
-                STREAM_EVAL_RUNS,
-                consumer_group="orchestrator",
-                consumer_name="orchestrator-runs",
-            ):
-                if not self._running:
-                    break
+        async for envelope in self.event_bus.consume(
+            STREAM_EVAL_RUNS,
+            consumer_group="orchestrator",
+            consumer_name="orchestrator-runs",
+        ):
+            if not self._running:
+                break
 
-                try:
-                    if envelope.event_type == EVALUATION_RUN_REQUESTED:
-                        await self._handle_run_requested(envelope)
-                    else:
-                        logger.debug(
-                            "Ignoring event type on eval-runs: %s",
-                            envelope.event_type,
-                            extra={"correlation_id": envelope.correlation_id},
-                        )
-                except Exception as e:
-                    logger.exception(
-                        "Error processing event %s",
+            try:
+                if envelope.event_type == EVALUATION_RUN_REQUESTED:
+                    await self._handle_run_requested(envelope)
+                else:
+                    logger.debug(
+                        "Ignoring event type on eval-runs: %s",
                         envelope.event_type,
                         extra={"correlation_id": envelope.correlation_id},
                     )
-                    if "run_id" in envelope.payload:
-                        await self._fail_run(
-                            envelope.payload["run_id"],
-                            f"Error processing event: {str(e)}",
-                        )
-
-                message_id = envelope.__dict__.get("_message_id")
-                if message_id:
-                    await self.event_bus.ack(
-                        STREAM_EVAL_RUNS,
-                        "orchestrator",
-                        message_id,
+            except HANDLED_ORCHESTRATOR_ERRORS as e:
+                logger.exception(
+                    "Error processing event %s",
+                    envelope.event_type,
+                    extra={"correlation_id": envelope.correlation_id},
+                )
+                if "run_id" in envelope.payload:
+                    await self._fail_run(
+                        envelope.payload["run_id"],
+                        f"Error processing event: {str(e)}",
                     )
 
-        except Exception as e:
-            logger.error("Error in eval-runs consumer: %s", e)
+            if envelope.delivery_message_id:
+                delivery_stream = (
+                    envelope.delivery_stream
+                    if isinstance(envelope.delivery_stream, str)
+                    else STREAM_EVAL_RUNS
+                )
+                delivery_consumer_group = (
+                    envelope.delivery_consumer_group
+                    if isinstance(envelope.delivery_consumer_group, str)
+                    else "orchestrator"
+                )
+                await self.event_bus.ack(
+                    delivery_stream,
+                    delivery_consumer_group,
+                    envelope.delivery_message_id,
+                )
 
     async def _consume_scores(self) -> None:
         """Consume events from stream:scores."""
-        try:
-            async for envelope in self.event_bus.consume(
-                STREAM_SCORES,
-                consumer_group="orchestrator",
-                consumer_name="orchestrator-scores",
-            ):
-                if not self._running:
-                    break
+        async for envelope in self.event_bus.consume(
+            STREAM_SCORES,
+            consumer_group="orchestrator",
+            consumer_name="orchestrator-scores",
+        ):
+            if not self._running:
+                break
 
-                try:
-                    if envelope.event_type == STEP_SCORED:
-                        await self._handle_step_scored(envelope)
-                    elif envelope.event_type == WORKFLOW_COMPLETED:
-                        logger.debug(
-                            "Workflow completed event received: %s",
-                            envelope.payload.get("run_id"),
-                            extra={"correlation_id": envelope.correlation_id},
-                        )
-                    else:
-                        logger.debug(
-                            "Ignoring event type on scores: %s",
-                            envelope.event_type,
-                            extra={"correlation_id": envelope.correlation_id},
-                        )
-                except Exception as e:
-                    logger.exception(
-                        "Error processing event %s",
+            try:
+                if envelope.event_type == STEP_SCORED:
+                    await self._handle_step_scored(envelope)
+                elif envelope.event_type == WORKFLOW_COMPLETED:
+                    logger.debug(
+                        "Workflow completed event received: %s",
+                        envelope.payload.get("run_id"),
+                        extra={"correlation_id": envelope.correlation_id},
+                    )
+                else:
+                    logger.debug(
+                        "Ignoring event type on scores: %s",
                         envelope.event_type,
                         extra={"correlation_id": envelope.correlation_id},
                     )
-                    if "run_id" in envelope.payload:
-                        await self._fail_run(
-                            envelope.payload["run_id"],
-                            f"Error processing event: {str(e)}",
-                        )
-
-                message_id = envelope.__dict__.get("_message_id")
-                if message_id:
-                    await self.event_bus.ack(
-                        STREAM_SCORES,
-                        "orchestrator",
-                        message_id,
+            except HANDLED_ORCHESTRATOR_ERRORS as e:
+                logger.exception(
+                    "Error processing event %s",
+                    envelope.event_type,
+                    extra={"correlation_id": envelope.correlation_id},
+                )
+                if "run_id" in envelope.payload:
+                    await self._fail_run(
+                        envelope.payload["run_id"],
+                        f"Error processing event: {str(e)}",
                     )
 
-        except Exception as e:
-            logger.error("Error in scores consumer: %s", e)
+            if envelope.delivery_message_id:
+                delivery_stream = (
+                    envelope.delivery_stream
+                    if isinstance(envelope.delivery_stream, str)
+                    else STREAM_SCORES
+                )
+                delivery_consumer_group = (
+                    envelope.delivery_consumer_group
+                    if isinstance(envelope.delivery_consumer_group, str)
+                    else "orchestrator"
+                )
+                await self.event_bus.ack(
+                    delivery_stream,
+                    delivery_consumer_group,
+                    envelope.delivery_message_id,
+                )
 
     async def stop(self) -> None:
         """Stop the orchestrator."""

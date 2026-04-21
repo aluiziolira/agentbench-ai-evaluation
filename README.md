@@ -209,7 +209,6 @@ uv run python -m cli.main rescore \
   --strategy llm_judge \
   --rubric "Prioritize production risk above all else"
 ```
-
 **Why This Matters:**
 - Deterministic `finding_match` scores remain stable
 - LLM-judged scores change when rubric changes
@@ -221,7 +220,7 @@ uv run python -m cli.main rescore \
 Requires Python 3.12+, Docker, and API keys (OpenAI + Anthropic).
 
 ```bash
-git clone <repo-url> && cd agentbench
+git clone <repo-url> && cd agentbench-ai-evaluation
 pip install uv && uv sync
 cp .env.example .env          # Add OPENAI_API_KEY and ANTHROPIC_API_KEY
 

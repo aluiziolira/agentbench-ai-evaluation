@@ -21,6 +21,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from agentbench.cases.loader import load_case
 from agentbench.cases.models import ReviewCaseDefinition
 from agentbench.dispatcher.adapters import ADAPTER_REGISTRY
@@ -38,6 +40,14 @@ from agentbench.storage.mongo import MongoStorage
 from agentbench.storage.redis_client import RedisStorage
 
 logger = logging.getLogger(__name__)
+
+HANDLED_DISPATCH_ERRORS = (
+    ValueError,
+    FileNotFoundError,
+    json.JSONDecodeError,
+    TimeoutError,
+    httpx.HTTPError,
+)
 
 
 class StepDispatcher:
@@ -286,11 +296,22 @@ class StepDispatcher:
                     break
 
                 if envelope.event_type != "workflow.step.dispatched":
-                    await self.event_bus.ack(
-                        STREAM_EVAL_STEPS,
-                        "dispatcher",
-                        envelope._message_id,  # type: ignore[attr-defined]
-                    )
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_EVAL_STEPS
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "dispatcher"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
                     continue
 
                 run_id = envelope.payload.get("run_id")
@@ -304,11 +325,22 @@ class StepDispatcher:
                             "event_type": envelope.event_type,
                         },
                     )
-                    await self.event_bus.ack(
-                        STREAM_EVAL_STEPS,
-                        "dispatcher",
-                        envelope._message_id,  # type: ignore[attr-defined]
-                    )
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_EVAL_STEPS
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "dispatcher"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
                     continue
 
                 logger.info(
@@ -327,11 +359,22 @@ class StepDispatcher:
                             "run_id": run_id,
                         },
                     )
-                    await self.event_bus.ack(
-                        STREAM_EVAL_STEPS,
-                        "dispatcher",
-                        envelope._message_id,  # type: ignore[attr-defined]
-                    )
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_EVAL_STEPS
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "dispatcher"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
                     continue
 
                 workflow = await self.mongo_storage.get_workflow(
@@ -346,11 +389,22 @@ class StepDispatcher:
                             "workflow_version": run.workflow_version,
                         },
                     )
-                    await self.event_bus.ack(
-                        STREAM_EVAL_STEPS,
-                        "dispatcher",
-                        envelope._message_id,  # type: ignore[attr-defined]
-                    )
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_EVAL_STEPS
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "dispatcher"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
                     continue
 
                 step = next((s for s in workflow.steps if s.step_id == step_id), None)
@@ -363,16 +417,27 @@ class StepDispatcher:
                             "step_id": step_id,
                         },
                     )
-                    await self.event_bus.ack(
-                        STREAM_EVAL_STEPS,
-                        "dispatcher",
-                        envelope._message_id,  # type: ignore[attr-defined]
-                    )
+                    if envelope.delivery_message_id:
+                        delivery_stream = (
+                            envelope.delivery_stream
+                            if isinstance(envelope.delivery_stream, str)
+                            else STREAM_EVAL_STEPS
+                        )
+                        delivery_consumer_group = (
+                            envelope.delivery_consumer_group
+                            if isinstance(envelope.delivery_consumer_group, str)
+                            else "dispatcher"
+                        )
+                        await self.event_bus.ack(
+                            delivery_stream,
+                            delivery_consumer_group,
+                            envelope.delivery_message_id,
+                        )
                     continue
 
                 try:
                     await self._dispatch_step(run, step)
-                except Exception as e:
+                except HANDLED_DISPATCH_ERRORS as e:
                     logger.exception(
                         f"Failed to dispatch step {step_id} for run {run_id}: {e}",
                         extra={
@@ -382,15 +447,22 @@ class StepDispatcher:
                         },
                     )
 
-                await self.event_bus.ack(
-                    STREAM_EVAL_STEPS,
-                    "dispatcher",
-                    envelope._message_id,  # type: ignore[attr-defined]
-                )
-
-        except Exception:
-            logger.exception("Dispatcher main loop failed")
-            raise
+                if envelope.delivery_message_id:
+                    delivery_stream = (
+                        envelope.delivery_stream
+                        if isinstance(envelope.delivery_stream, str)
+                        else STREAM_EVAL_STEPS
+                    )
+                    delivery_consumer_group = (
+                        envelope.delivery_consumer_group
+                        if isinstance(envelope.delivery_consumer_group, str)
+                        else "dispatcher"
+                    )
+                    await self.event_bus.ack(
+                        delivery_stream,
+                        delivery_consumer_group,
+                        envelope.delivery_message_id,
+                    )
         finally:
             logger.info("Step dispatcher main loop ended")
 

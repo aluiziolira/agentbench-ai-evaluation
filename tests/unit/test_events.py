@@ -7,10 +7,13 @@ Tests cover:
 - EventBus helpers
 """
 
+import json
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
+import redis.asyncio as redis_module
 
 from agentbench.events import (
     AGENT_RESPONSE_RECEIVED,
@@ -32,6 +35,7 @@ from agentbench.events import (
     WORKFLOW_COMPLETED,
     WORKFLOW_STEP_DISPATCHED,
     WORKFLOW_STEP_TIMED_OUT,
+    EventBus,
     EventEnvelope,
     get_event_types_for_stream,
     get_stream_for_event,
@@ -455,3 +459,91 @@ class TestEventEnvelopeCreation:
         assert restored.event_type == original.event_type
         assert restored.correlation_id == original.correlation_id
         assert restored.payload == original.payload
+
+    def test_delivery_metadata_fields_are_typed_and_not_serialized(self) -> None:
+        """Test delivery metadata is available on the model but excluded from wire format."""
+        event = EventEnvelope(
+            event_id=generate_uuid(),
+            event_type=WORKFLOW_STEP_DISPATCHED,
+            timestamp=now_iso(),
+            correlation_id=generate_uuid(),
+            payload={"run_id": generate_uuid(), "step_id": "s1_findings"},
+            delivery_message_id="123-0",
+            delivery_stream=STREAM_EVAL_STEPS,
+            delivery_consumer_group="dispatcher",
+        )
+
+        assert event.delivery_message_id == "123-0"
+        assert event.delivery_stream == STREAM_EVAL_STEPS
+        assert event.delivery_consumer_group == "dispatcher"
+        assert event.model_dump() == {
+            "event_id": event.event_id,
+            "event_type": WORKFLOW_STEP_DISPATCHED,
+            "schema_version": "1.0",
+            "timestamp": event.timestamp,
+            "correlation_id": event.correlation_id,
+            "payload": event.payload,
+        }
+
+
+class TestEventBusNegativePaths:
+    """Tests for typed negative-path handling in EventBus."""
+
+    @pytest.mark.asyncio
+    async def test_publish_re_raises_redis_errors(self) -> None:
+        """Redis transport failures should be logged and re-raised as-is."""
+        redis_client = AsyncMock()
+        redis_client.xadd.side_effect = redis_module.RedisError("redis down")
+        bus = EventBus(redis_client)
+        run_id = generate_uuid()
+
+        event = EventEnvelope(
+            event_id=generate_uuid(),
+            event_type=WORKFLOW_STEP_DISPATCHED,
+            timestamp=now_iso(),
+            correlation_id=run_id,
+            payload={"run_id": run_id, "step_id": "s1_findings"},
+        )
+
+        with pytest.raises(redis_module.RedisError, match="redis down"):
+            await bus.publish(STREAM_EVAL_STEPS, event)
+
+    @pytest.mark.asyncio
+    async def test_consume_acks_known_deserialization_errors(self) -> None:
+        """Known bad payloads should be acked so the consumer can keep moving."""
+        redis_client = AsyncMock()
+        redis_client.xgroup_create = AsyncMock()
+        redis_client.xreadgroup = AsyncMock(
+            side_effect=[
+                [(STREAM_EVAL_STEPS, [(b"1-0", {b"data": b"not-json"})])],
+                KeyboardInterrupt(),
+            ]
+        )
+        redis_client.xack = AsyncMock()
+        bus = EventBus(redis_client)
+
+        with pytest.raises(KeyboardInterrupt):
+            async for _ in bus.consume(STREAM_EVAL_STEPS, "dispatcher", "worker-1"):
+                pass
+
+        redis_client.xack.assert_awaited_once_with(STREAM_EVAL_STEPS, "dispatcher", b"1-0")
+
+    @pytest.mark.asyncio
+    async def test_consume_re_raises_unexpected_deserialization_errors(self) -> None:
+        """Unexpected deserialization errors should escape instead of being silently acked."""
+        redis_client = AsyncMock()
+        redis_client.xgroup_create = AsyncMock()
+        redis_client.xreadgroup = AsyncMock(
+            side_effect=[
+                [(STREAM_EVAL_STEPS, [(b"1-0", {b"data": json.dumps({}).encode()})])],
+                KeyboardInterrupt(),
+            ]
+        )
+        bus = EventBus(redis_client)
+
+        with (
+            patch.object(bus, "_deserialize_event", side_effect=TypeError("bad type")),
+            pytest.raises(TypeError, match="bad type"),
+        ):
+            async for _ in bus.consume(STREAM_EVAL_STEPS, "dispatcher", "worker-1"):
+                pass
