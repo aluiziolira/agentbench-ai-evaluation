@@ -172,6 +172,7 @@ class TestRunReportGeneration:
                 step_id="s1_findings",
                 strategy="finding_match",
                 raw_score=0.85,
+                weight=2.0,
                 weighted_score=1.7,
                 latency_ms=500,
                 passed=True,
@@ -182,6 +183,7 @@ class TestRunReportGeneration:
                 step_id="s2_summary",
                 strategy="llm_judge",
                 raw_score=0.7,
+                weight=1.0,
                 weighted_score=0.7,
                 latency_ms=300,
                 passed=True,
@@ -206,7 +208,7 @@ class TestRunReportGeneration:
         assert report.case_id == "case-1"
         assert report.case_tags == ["auth", "api"]
         assert report.agent_id == "gpt-4o-mini"
-        assert report.total_score == 2.4  # 1.7 + 0.7
+        assert report.total_score == pytest.approx(0.8)  # (1.7 + 0.7) / (2.0 + 1.0)
         assert report.total_latency_ms == 800  # 500 + 300
         assert len(report.step_scores) == 2
         assert report.workflow_id == "wf_pr_review_v1"
@@ -225,6 +227,7 @@ class TestRunReportGeneration:
                 "step_id": "s1_findings",
                 "strategy": "finding_match",
                 "raw_score": 0.85,
+                "weight": 2.0,
                 "weighted_score": 1.7,
                 "latency_ms": 500,
                 "passed": True,
@@ -274,7 +277,7 @@ class TestRunReportGeneration:
             report = mock_mongo_storage.create_run_report.call_args[0][0]
             assert isinstance(report, RunReport)
             assert report.run_id == "run-1"
-            assert report.total_score == 1.7
+            assert report.total_score == 0.85  # 1.7 / 2.0
             # Verify case_tags were loaded from case
             assert report.case_tags == ["testing", "coverage"]
 
@@ -319,6 +322,7 @@ class TestRunReportGeneration:
                 "step_id": "s1_findings",
                 "strategy": "finding_match",
                 "raw_score": 0.85,
+                "weight": 2.0,
                 "weighted_score": 1.7,
                 "latency_ms": 500,
                 "passed": True,
@@ -905,10 +909,10 @@ class TestStepBreakdown:
         assert "s1_findings" in gpt_summary.step_breakdown
         assert "s2_summary" in gpt_summary.step_breakdown
 
-        # s1_findings: (1.6 + 1.4) / 2 = 1.5
-        assert gpt_summary.step_breakdown["s1_findings"] == 1.5
+        # s1_findings raw average: (0.8 + 0.7) / 2 = 0.75
+        assert gpt_summary.step_breakdown["s1_findings"] == 0.75
 
-        # s2_summary: (0.9 + 0.6) / 2 = 0.75
+        # s2_summary raw average: (0.9 + 0.6) / 2 = 0.75
         assert gpt_summary.step_breakdown["s2_summary"] == 0.75
 
 

@@ -473,6 +473,7 @@ class LLMJudgeStrategy:
             step_id=step.step_id,
             strategy=self.strategy_id,
             raw_score=score,
+            weight=weight,
             weighted_score=weighted_score,
             latency_ms=latency_ms,
             passed=passed,

@@ -349,8 +349,13 @@ class ScoringEngine:
                             "run_id": score.run_id,
                             "case_id": score.case_id,
                             "step_id": score.step_id,
+                            "strategy": score.strategy,
                             "score": score.raw_score,
+                            "raw_score": score.raw_score,
+                            "weight": score.weight,
                             "weighted_score": score.weighted_score,
+                            "latency_ms": score.latency_ms,
+                            "passed": score.passed,
                         },
                     )
                     await self.event_bus.publish(STREAM_SCORES, event)

@@ -57,6 +57,11 @@ ALLOWED_PAYLOAD_FIELDS = {
     "error",
     "latency_ms",
     "score",
+    "strategy",
+    "raw_score",
+    "weight",
+    "weighted_score",
+    "passed",
     "details",
 }
 

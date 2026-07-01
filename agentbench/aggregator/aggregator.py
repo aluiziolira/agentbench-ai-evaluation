@@ -133,7 +133,8 @@ class Aggregator:
         Returns:
             A RunReport with computed totals.
         """
-        total_score = sum(s.weighted_score for s in scores)
+        total_weight = sum(s.weight for s in scores)
+        total_score = sum(s.weighted_score for s in scores) / total_weight if total_weight else 0.0
         total_latency = sum(s.latency_ms for s in scores)
 
         return RunReport(
@@ -197,12 +198,12 @@ class Aggregator:
             scores = agent_scores[agent_id]
             latencies = agent_latencies[agent_id]
 
-            # Average step scores across all runs for this agent
+            # Average raw step scores across all runs for this agent
             step_scores: dict[str, list[float]] = defaultdict(list)
             for report in run_reports:
                 if report.agent_id == agent_id:
                     for step_score in report.step_scores:
-                        step_scores[step_score.step_id].append(step_score.weighted_score)
+                        step_scores[step_score.step_id].append(step_score.raw_score)
 
             step_breakdown = {
                 step_id: sum(scores) / len(scores) if scores else 0.0
@@ -242,6 +243,7 @@ class Aggregator:
             step_id=payload["step_id"],
             strategy=payload.get("strategy", ""),
             raw_score=payload.get("raw_score", 0.0),
+            weight=payload.get("weight", 1.0),
             weighted_score=payload.get("weighted_score", 0.0),
             latency_ms=payload.get("latency_ms", 0),
             passed=payload.get("passed", False),

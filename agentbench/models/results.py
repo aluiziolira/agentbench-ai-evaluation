@@ -9,6 +9,7 @@ class StepScore(BaseModel):
     step_id: str
     strategy: str
     raw_score: float
+    weight: float = 1.0
     weighted_score: float
     latency_ms: int
     passed: bool

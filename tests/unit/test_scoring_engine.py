@@ -646,6 +646,12 @@ class TestEventEmission:
         assert event.payload["step_id"] == "s1_findings"
         assert "score" in event.payload
         assert "weighted_score" in event.payload
+        # Fields the aggregator consumes to build StepScore
+        assert event.payload["strategy"] == "finding_match"
+        assert "raw_score" in event.payload
+        assert "weight" in event.payload
+        assert event.payload["latency_ms"] == 1000
+        assert "passed" in event.payload
 
 
 class TestStop:
