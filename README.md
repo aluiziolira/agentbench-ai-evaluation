@@ -6,6 +6,9 @@ A minimal AI agent evaluation framework for PR review behavior, built with event
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml/badge.svg)](https://github.com/aluiziolira/agentbench-ai-evaluation/actions/workflows/ci.yml)
 
+![AgentBench demo](docs/demo.gif)
+
+*Demo recorded with [VHS](https://github.com/charmbracelet/vhs) ([`docs/demo.tape`](docs/demo.tape)) against mocked LLM adapters: the full pipeline — Redis Streams orchestration, deterministic + LLM-judge scoring, MongoDB reports, stored-output re-scoring — runs for real; only the provider API calls are stubbed, so the demo is reproducible offline at zero API cost.*
 
 AgentBench runs AI agents against seeded PR review cases, scores their findings through deterministic matching, and produces comparative benchmark reports.
 
