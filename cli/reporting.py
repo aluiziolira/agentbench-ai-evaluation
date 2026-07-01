@@ -297,3 +297,45 @@ def render_insights(insights: dict[str, Any]) -> RenderableType:
 
     content = Text("\n").join(lines)
     return Panel(content, title="Insights", border_style="blue")
+
+
+def render_rescore_summary(score: Any) -> RenderableType:
+    """Render a compact summary of a re-scored step.
+
+    Shows the headline score, pass/fail, and per-dimension judge scores
+    when the strategy provides them. The full StepScore stays available
+    behind the CLI's --json flag.
+    """
+    from rich.console import Group
+    from rich.panel import Panel
+
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Case", score.case_id)
+    table.add_row("Step", score.step_id)
+    table.add_row("Strategy", score.strategy)
+    table.add_row("Score", f"{score.raw_score:.3f}")
+    table.add_row("Weighted", f"{score.weighted_score:.3f} (weight {score.weight:g})")
+    table.add_row("Passed", "[green]yes[/]" if score.passed else "[red]no[/]")
+
+    renderables: list[RenderableType] = [table]
+
+    dimensions = score.details.get("dimension_scores") or {}
+    if dimensions:
+        dim_table = Table(show_header=False, box=None, padding=(0, 1))
+        dim_table.add_column("Dimension", style="cyan")
+        dim_table.add_column("Bar")
+        dim_table.add_column("Score", justify="right")
+        for name, value in dimensions.items():
+            filled = int(round(value * 10))
+            bar = "█" * filled + "░" * (10 - filled)
+            dim_table.add_row(name, bar, f"{value:.2f}")
+        renderables.append(Panel(dim_table, title="Judge Dimensions", border_style="cyan"))
+
+    reasoning = score.details.get("reasoning")
+    if reasoning:
+        renderables.append(Panel(Text(str(reasoning)), title="Reasoning", border_style="blue"))
+
+    return Group(*renderables)

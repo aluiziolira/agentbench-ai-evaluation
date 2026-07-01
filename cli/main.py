@@ -17,6 +17,7 @@ from cli.reporting import (
     compute_insights,
     render_insights,
     render_per_topic_tables,
+    render_rescore_summary,
     render_step_breakdown,
     render_summary_table,
 )
@@ -280,6 +281,7 @@ def rescore(
     step: str = typer.Option(..., "--step", help="Step ID"),
     strategy: str = typer.Option(..., "--strategy", help="Scoring strategy"),
     rubric: str | None = typer.Option(None, "--rubric", help="Scoring rubric"),
+    json_output: bool = typer.Option(False, "--json", help="Print the full StepScore as JSON"),
 ) -> None:
     """Re-score a step with different parameters."""
     from agentbench.scoring.engine import RawIONotFoundError, ScoringEngine
@@ -302,7 +304,10 @@ def rescore(
         )
 
         console.print("[bold green]Re-scoring complete[/]")
-        console.print_json(data=score.model_dump() if hasattr(score, "model_dump") else score)
+        if json_output:
+            console.print_json(data=score.model_dump() if hasattr(score, "model_dump") else score)
+        else:
+            console.print(render_rescore_summary(score))
 
     try:
         asyncio.run(do_rescore())

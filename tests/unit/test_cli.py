@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from typer.testing import CliRunner
 
+from agentbench.models.results import StepScore
 from cli.main import app
 
 runner = CliRunner()
@@ -649,17 +650,18 @@ class TestRescoreCommand:
 
         mock_engine = MagicMock()
         mock_engine.rescore_step = AsyncMock()
-        mock_engine.rescore_step.return_value = {
-            "run_id": "run-123",
-            "case_id": "pr_001_missing_auth_check",
-            "step_id": "s1_findings",
-            "strategy": "llm_judge",
-            "raw_score": 0.75,
-            "weighted_score": 1.5,
-            "latency_ms": 1200,
-            "passed": True,
-            "details": {"rubric": "Test rubric"},
-        }
+        mock_engine.rescore_step.return_value = StepScore(
+            run_id="run-123",
+            case_id="pr_001_missing_auth_check",
+            step_id="s1_findings",
+            strategy="llm_judge",
+            raw_score=0.75,
+            weight=2.0,
+            weighted_score=1.5,
+            latency_ms=1200,
+            passed=True,
+            details={"reasoning": "Judge reasoning text", "dimension_scores": {"grounding": 0.8}},
+        )
         mock_engine_class.return_value = mock_engine
 
         result = runner.invoke(
@@ -682,13 +684,54 @@ class TestRescoreCommand:
         assert "Strategy: llm_judge" in result.output
         assert "Rubric: Test rubric" in result.output
         assert "Re-scoring complete" in result.output
-        assert '"weighted_score": 1.5' in result.output
+        assert "0.750" in result.output
+        assert "Judge Dimensions" in result.output
+        assert "Judge reasoning text" in result.output
         mock_engine.rescore_step.assert_awaited_once_with(
             run_id="run-123",
             step_id="s1_findings",
             strategy="llm_judge",
             rubric="Test rubric",
         )
+
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_json_output(self, mock_mongo_class, mock_engine_class):
+        """Test --json prints the full StepScore payload."""
+        mock_mongo_class.return_value = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock(
+            return_value=StepScore(
+                run_id="run-123",
+                case_id="pr_001_missing_auth_check",
+                step_id="s1_findings",
+                strategy="llm_judge",
+                raw_score=0.75,
+                weight=2.0,
+                weighted_score=1.5,
+                latency_ms=1200,
+                passed=True,
+                details={},
+            )
+        )
+        mock_engine_class.return_value = mock_engine
+
+        result = runner.invoke(
+            app,
+            [
+                "rescore",
+                "--run-id",
+                "run-123",
+                "--step",
+                "s1_findings",
+                "--strategy",
+                "llm_judge",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert '"weighted_score": 1.5' in result.output
 
     @patch("agentbench.scoring.engine.ScoringEngine")
     @patch("agentbench.storage.mongo.MongoStorage")
@@ -722,17 +765,18 @@ class TestRescoreCommand:
         mock_mongo_class.return_value = MagicMock()
         mock_engine = MagicMock()
         mock_engine.rescore_step = AsyncMock(
-            return_value={
-                "run_id": "run-123",
-                "case_id": "pr_001_missing_auth_check",
-                "step_id": "s1_findings",
-                "strategy": "finding_match",
-                "raw_score": 1.0,
-                "weighted_score": 2.0,
-                "latency_ms": 900,
-                "passed": True,
-                "details": {},
-            }
+            return_value=StepScore(
+                run_id="run-123",
+                case_id="pr_001_missing_auth_check",
+                step_id="s1_findings",
+                strategy="finding_match",
+                raw_score=1.0,
+                weight=2.0,
+                weighted_score=2.0,
+                latency_ms=900,
+                passed=True,
+                details={},
+            )
         )
         mock_engine_class.return_value = mock_engine
 

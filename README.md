@@ -209,6 +209,8 @@ uv run python -m cli.main rescore \
   --strategy llm_judge \
   --rubric "Prioritize production risk above all else"
 ```
+
+The command prints a compact score summary (with per-dimension judge scores when available); pass `--json` for the full `StepScore` payload.
 **Why This Matters:**
 - Deterministic `finding_match` scores remain stable
 - LLM-judged scores change when rubric changes
