@@ -37,6 +37,7 @@ from agentbench.models import (
     BenchmarkReport,
     EventEnvelope,
     RunReport,
+    RunState,
     StepScore,
 )
 from agentbench.storage.mongo import MongoStorage
@@ -156,6 +157,8 @@ class Aggregator:
         workflow_id: str,
         case_set_id: str,
         run_reports: list[RunReport],
+        agent_failures: dict[str, int] | None = None,
+        agent_totals: dict[str, int] | None = None,
     ) -> BenchmarkReport:
         """Compute a BenchmarkReport from run reports.
 
@@ -167,6 +170,11 @@ class Aggregator:
             workflow_id: The workflow identifier.
             case_set_id: The case set identifier.
             run_reports: List of RunReport objects for completed runs.
+            agent_failures: Per-agent count of terminally failed runs. Failed and
+                timed-out runs never produce RunReports, so this is supplied
+                separately by the caller.
+            agent_totals: Per-agent count of total runs (successful and failed),
+                used as the failure_rate denominator.
 
         Returns:
             A BenchmarkReport with agent summaries and per-case scores.
@@ -174,7 +182,10 @@ class Aggregator:
         # Aggregate scores by agent
         agent_scores: dict[str, list[float]] = defaultdict(list)
         agent_latencies: dict[str, list[int]] = defaultdict(list)
-        agent_failures: dict[str, int] = defaultdict(int)
+        # Failure counts and run totals cover all runs (including failed ones,
+        # which never emit RunReports); default to no failures when unavailable.
+        failures = agent_failures or {}
+        totals = agent_totals or {}
 
         for report in run_reports:
             agent_scores[report.agent_id].append(report.total_score)
@@ -197,6 +208,9 @@ class Aggregator:
         for agent_id in agent_scores:
             scores = agent_scores[agent_id]
             latencies = agent_latencies[agent_id]
+            # Failure rate is failures over total runs; fall back to the count of
+            # successful runs when run totals were not provided.
+            total_runs = totals.get(agent_id, len(scores))
 
             # Average raw step scores across all runs for this agent
             step_scores: dict[str, list[float]] = defaultdict(list)
@@ -215,7 +229,7 @@ class Aggregator:
                 avg_score=sum(scores) / len(scores) if scores else 0.0,
                 p50_latency_ms=self._calculate_percentile(latencies, 50),
                 p95_latency_ms=self._calculate_percentile(latencies, 95),
-                failure_rate=agent_failures[agent_id] / len(scores) if scores else 0.0,
+                failure_rate=failures.get(agent_id, 0) / total_runs if total_runs else 0.0,
                 step_breakdown=step_breakdown,
             )
             agents.append(summary)
@@ -374,12 +388,25 @@ class Aggregator:
         first_run = await self.mongo_storage.get_run(first_report.run_id)
         case_set_id = first_run.case_set_id if first_run else "pr_review_cases_v1"
 
+        # Tally per-agent totals and terminal failures across ALL runs. Failed and
+        # timed-out runs never emit workflow.completed, so they are absent from
+        # run_reports; load them from Mongo to compute an accurate failure rate.
+        all_runs = await self.mongo_storage.list_runs(benchmark_id=benchmark_id)
+        agent_totals: dict[str, int] = defaultdict(int)
+        agent_failures: dict[str, int] = defaultdict(int)
+        for run in all_runs:
+            agent_totals[run.agent_id] += 1
+            if run.state in (RunState.FAILED, RunState.TIMED_OUT):
+                agent_failures[run.agent_id] += 1
+
         # Compute benchmark report
         benchmark_report = self._compute_benchmark_report(
             benchmark_id=benchmark_id,
             workflow_id=workflow_id,
             case_set_id=case_set_id,
             run_reports=run_reports,
+            agent_failures=agent_failures,
+            agent_totals=agent_totals,
         )
 
         try:
