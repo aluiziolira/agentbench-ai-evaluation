@@ -1,0 +1,941 @@
+"""Unit tests for AgentBench CLI."""
+
+import json
+import os
+import re
+import runpy
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from typer.testing import CliRunner
+
+from agentbench.models.results import StepScore
+from cli.main import app
+
+runner = CliRunner()
+
+
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text for testing."""
+    ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+    return ansi_escape.sub("", text)
+
+
+def _completed_report_data(*, agents: list[dict]) -> dict:
+    """Build a valid BenchmarkReport JSON payload for mock API responses."""
+    # Ensure every agent has all required AgentSummary fields
+    full_agents = []
+    for a in agents:
+        full_agents.append(
+            {
+                "agent_id": a["agent_id"],
+                "avg_score": a["avg_score"],
+                "p50_latency_ms": a["p50_latency_ms"],
+                "p95_latency_ms": a.get("p95_latency_ms", a["p50_latency_ms"] * 3),
+                "failure_rate": a.get("failure_rate", 0.0),
+                "step_breakdown": a.get("step_breakdown", {}),
+            }
+        )
+    return {
+        "benchmark_id": "bench-123",
+        "workflow_id": "wf_pr_review_v1",
+        "case_set_id": "pr_review_cases_v1",
+        "created_at": "2024-01-01T00:00:00Z",
+        "case_count": 2,
+        "status": "completed",
+        "agents": full_agents,
+        "per_case_scores": {
+            "pr_001": {"gpt-4o-mini": 0.9, "claude-haiku-4-5": 0.85},
+            "pr_002": {"gpt-4o-mini": 0.8, "claude-haiku-4-5": 0.9},
+        },
+        "per_case_topics": {
+            "pr_001": "Auth/Security",
+            "pr_002": "Testing",
+        },
+    }
+
+
+class TestVersionCommand:
+    """Tests for the version command."""
+
+    def test_version_shows_correct_version(self):
+        """Test that version command displays correct version."""
+        result = runner.invoke(app, ["version"])
+        assert result.exit_code == 0
+        assert "AgentBench v0.1.0" in result.output
+
+    def test_version_no_args_required(self):
+        """Test that version command accepts no arguments."""
+        result = runner.invoke(app, ["version"])
+        assert result.exit_code == 0
+
+
+class TestListCasesCommand:
+    """Tests for the list-cases command."""
+
+    def test_list_cases_with_valid_case_set(self, tmp_path):
+        """Test listing cases with a valid case set."""
+        # Create a temporary fixtures directory with manifest
+        fixtures_dir = tmp_path / "fixtures"
+        cases_dir = fixtures_dir / "cases"
+        cases_dir.mkdir(parents=True)
+
+        # Create manifest.json
+        manifest = {
+            "version": "1.0.0",
+            "case_set_id": "pr_review_cases_v1",
+            "cases": [
+                {
+                    "case_id": "pr_001",
+                    "case_set_id": "pr_review_cases_v1",
+                    "enabled": True,
+                    "difficulty": "medium",
+                    "tags": ["security", "authentication"],
+                },
+                {
+                    "case_id": "pr_002",
+                    "case_set_id": "pr_review_cases_v1",
+                    "enabled": True,
+                    "difficulty": "hard",
+                    "tags": ["performance"],
+                },
+                {
+                    "case_id": "pr_003",
+                    "case_set_id": "pr_review_cases_v1",
+                    "enabled": False,  # Disabled case
+                    "difficulty": "easy",
+                    "tags": ["documentation"],
+                },
+            ],
+        }
+
+        with open(fixtures_dir / "manifest.json", "w") as f:
+            json.dump(manifest, f)
+
+        # Create case directories with minimal required files
+        for case_id in ["pr_001", "pr_002", "pr_003"]:
+            case_dir = cases_dir / case_id
+            case_dir.mkdir()
+            (case_dir / "ticket.md").write_text("Test ticket")
+            (case_dir / "diff.patch").write_text("Test diff")
+            with open(case_dir / "ground_truth.json", "w") as f:
+                json.dump({"expected_findings": [], "disallowed_findings": []}, f)
+            with open(case_dir / "metadata.json", "w") as f:
+                json.dump({"difficulty": "medium", "tags": []}, f)
+
+        result = runner.invoke(
+            app,
+            ["list-cases", "--case-set", "pr_review_cases_v1", "--fixtures-dir", str(fixtures_dir)],
+        )
+        assert result.exit_code == 0
+        assert "Case Set: pr_review_cases_v1" in result.output
+        assert "Total Cases: 2" in result.output  # Only enabled cases
+        assert "pr_001" in result.output
+        assert "pr_002" in result.output
+        assert "pr_003" not in result.output  # Disabled, shouldn't appear
+
+    def test_list_cases_missing_manifest(self, tmp_path):
+        """Test listing cases when manifest file is missing."""
+        fixtures_dir = tmp_path / "nonexistent"
+
+        result = runner.invoke(
+            app,
+            ["list-cases", "--case-set", "pr_review_cases_v1", "--fixtures-dir", str(fixtures_dir)],
+        )
+        assert result.exit_code == 1
+        assert "Case set not found" in result.output
+
+    @patch("cli.main.load_manifest", side_effect=RuntimeError("boom"))
+    def test_list_cases_re_raises_unexpected_errors(self, mock_load_manifest, tmp_path):
+        """Unexpected list-cases failures should bubble instead of being flattened."""
+        fixtures_dir = tmp_path / "fixtures"
+        fixtures_dir.mkdir()
+
+        result = runner.invoke(
+            app,
+            ["list-cases", "--case-set", "pr_review_cases_v1", "--fixtures-dir", str(fixtures_dir)],
+        )
+
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "boom"
+
+    def test_list_cases_wrong_case_set_id(self, tmp_path):
+        """Test listing cases with mismatched case_set_id."""
+        fixtures_dir = tmp_path / "fixtures"
+        fixtures_dir.mkdir()
+
+        # Create manifest with different case_set_id
+        manifest = {
+            "version": "1.0.0",
+            "case_set_id": "different_case_set",  # Different from requested
+            "cases": [],
+        }
+
+        with open(fixtures_dir / "manifest.json", "w") as f:
+            json.dump(manifest, f)
+
+        result = runner.invoke(
+            app,
+            ["list-cases", "--case-set", "pr_review_cases_v1", "--fixtures-dir", str(fixtures_dir)],
+        )
+        assert result.exit_code == 0
+        assert "Total Cases: 0" in result.output
+
+
+class TestSeedCommand:
+    """Tests for the seed command."""
+
+    @patch("agentbench.storage.mongo.MongoStorage")
+    @patch("json.load")
+    def test_seed_creates_workflow(self, mock_json_load, mock_mongo_class):
+        """Test that seed command creates workflow when it exists."""
+        # Setup mocks
+        mock_mongo = AsyncMock()
+        mock_mongo_class.return_value = mock_mongo
+        mock_mongo.setup_indexes = AsyncMock()
+        mock_mongo.create_workflow = AsyncMock()
+
+        # Create temporary workflow file with all required fields
+        workflow_data = {
+            "workflow_id": "wf_pr_review_v1",
+            "version": "1.0.0",
+            "status": "published",
+            "description": "Test workflow",
+            "created_at": "2024-01-01T00:00:00Z",
+            "steps": [
+                {
+                    "step_id": "s1_findings",
+                    "order": 1,
+                    "input": "ticket_and_diff",
+                    "scoring": {
+                        "strategy": "finding_match",
+                        "rubric": "Test rubric",
+                        "weight": 1.0,
+                    },
+                    "timeout_ms": 60000,
+                }
+            ],
+        }
+        mock_json_load.return_value = workflow_data
+
+        with patch("cli.main.Path") as mock_path_class:
+            # Mock the workflow file existence check
+            mock_workflow_path = MagicMock()
+            mock_workflow_path.exists.return_value = True
+
+            # Mock file opening
+            mock_file = MagicMock()
+            mock_context = MagicMock()
+            mock_context.__enter__ = MagicMock(return_value=mock_file)
+            mock_context.__exit__ = MagicMock(return_value=False)
+            mock_workflow_path.open.return_value = mock_context
+
+            mock_path_class.side_effect = lambda x: (
+                mock_workflow_path if x == "workflows/wf_pr_review_v1.json" else Path(x)
+            )
+
+            result = runner.invoke(app, ["seed", "--mongo-uri", "mongodb://test:27017"])
+            assert result.exit_code == 0
+            assert "Database seeded successfully" in result.output
+
+    @patch("agentbench.storage.mongo.MongoStorage")
+    @patch("json.load")
+    def test_seed_handles_existing_workflow(self, mock_json_load, mock_mongo_class):
+        """Test that seed command handles already-existing workflows gracefully."""
+        from pymongo.errors import DuplicateKeyError
+
+        # Setup mocks
+        mock_mongo = AsyncMock()
+        mock_mongo_class.return_value = mock_mongo
+        mock_mongo.setup_indexes = AsyncMock()
+
+        # Create workflow raises duplicate key error (already exists)
+        mock_mongo.create_workflow = AsyncMock(
+            side_effect=DuplicateKeyError("Workflow already exists")
+        )
+
+        workflow_data = {
+            "workflow_id": "wf_pr_review_v1",
+            "version": "1.0.0",
+            "status": "published",
+            "description": "Test workflow",
+            "created_at": "2024-01-01T00:00:00Z",
+            "steps": [
+                {
+                    "step_id": "s1_findings",
+                    "order": 1,
+                    "input": "ticket_and_diff",
+                    "scoring": {
+                        "strategy": "finding_match",
+                        "rubric": "Test rubric",
+                        "weight": 1.0,
+                    },
+                    "timeout_ms": 60000,
+                }
+            ],
+        }
+        mock_json_load.return_value = workflow_data
+
+        with patch("cli.main.Path") as mock_path_class:
+            # Mock the workflow file existence check
+            mock_workflow_path = MagicMock()
+            mock_workflow_path.exists.return_value = True
+
+            # Mock file opening
+            mock_file = MagicMock()
+            mock_context = MagicMock()
+            mock_context.__enter__ = MagicMock(return_value=mock_file)
+            mock_context.__exit__ = MagicMock(return_value=False)
+            mock_workflow_path.open.return_value = mock_context
+
+            mock_path_class.side_effect = lambda x: (
+                mock_workflow_path if x == "workflows/wf_pr_review_v1.json" else Path(x)
+            )
+
+            result = runner.invoke(app, ["seed", "--mongo-uri", "mongodb://test:27017"])
+            assert result.exit_code == 0
+            assert "Workflow may already exist" in result.output
+            assert "Database seeded successfully" in result.output
+
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_seed_skips_if_no_workflow_file(self, mock_mongo_class):
+        """Test that seed command skips workflow creation if file doesn't exist."""
+        # Setup mocks
+        mock_mongo = AsyncMock()
+        mock_mongo_class.return_value = mock_mongo
+        mock_mongo.setup_indexes = AsyncMock()
+
+        with patch("cli.main.Path") as mock_path_class:
+            # Mock the workflow file doesn't exist
+            mock_workflow_path = MagicMock()
+            mock_workflow_path.exists.return_value = False
+
+            mock_path_class.side_effect = lambda x: (
+                mock_workflow_path if x == "workflows/wf_pr_review_v1.json" else Path(x)
+            )
+
+            result = runner.invoke(app, ["seed", "--mongo-uri", "mongodb://test:27017"])
+            assert result.exit_code == 0
+            assert "Database seeded successfully" in result.output
+            # create_workflow should not be called
+            mock_mongo.create_workflow.assert_not_called()
+
+
+class TestRunCommand:
+    """Tests for the run command."""
+
+    @patch("httpx.post")
+    def test_run_creates_benchmark(self, mock_post):
+        """Test that run command creates a benchmark."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"benchmark_id": "bench-123"}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--workflow",
+                "wf_pr_review_v1",
+                "--case-set",
+                "pr_review_cases_v1",
+                "--agents",
+                "gpt-4o-mini",
+                "--agents",
+                "claude-haiku-4-5",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Starting benchmark" in result.output
+        assert "wf_pr_review_v1" in result.output
+        assert "pr_review_cases_v1" in result.output
+        assert "gpt-4o-mini" in result.output
+        assert "claude-haiku-4-5" in result.output
+        assert "Benchmark started: bench-123" in result.output
+
+    @patch("httpx.post")
+    def test_run_handles_api_error(self, mock_post):
+        """Test that run command handles API errors gracefully."""
+        # Setup mock to raise exception
+        import httpx
+
+        mock_post.side_effect = httpx.ConnectError("Connection refused")
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--workflow",
+                "wf_pr_review_v1",
+                "--case-set",
+                "pr_review_cases_v1",
+                "--agents",
+                "gpt-4o-mini",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Error: Connection refused" in result.output
+
+    @patch("httpx.post")
+    def test_run_re_raises_unexpected_errors(self, mock_post):
+        """Unexpected CLI errors should not be coerced into a generic exit path."""
+        mock_post.side_effect = RuntimeError("boom")
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--workflow",
+                "wf_pr_review_v1",
+                "--case-set",
+                "pr_review_cases_v1",
+                "--agents",
+                "gpt-4o-mini",
+            ],
+        )
+
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "boom"
+
+
+class TestReportCommand:
+    """Tests for the report command."""
+
+    @patch("httpx.get")
+    def test_report_shows_completed_benchmark(self, mock_get):
+        """Test that report command displays completed benchmark."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+                {"agent_id": "claude-haiku-4-5", "avg_score": 0.82, "p50_latency_ms": 1100},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-123"])
+        assert result.exit_code == 0
+        assert "Fetching report for bench-123" in result.output
+        assert "Benchmark Complete" in result.output
+        assert "wf_pr_review_v1" in result.output
+        assert "gpt-4o-mini" in result.output
+        assert "claude-haiku-4-5" in result.output
+        assert "0.85" in result.output
+        assert "0.82" in result.output
+
+    @patch("httpx.get")
+    def test_report_in_progress_no_watch(self, mock_get):
+        """Test that report command shows in-progress status without watch."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"benchmark_id": "bench-123", "status": "in_progress"}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-123"])
+        assert result.exit_code == 0
+        assert "Benchmark in progress" in result.output
+        assert "Use --watch to wait for completion" in result.output
+
+    @patch("httpx.get")
+    def test_report_re_raises_unexpected_errors(self, mock_get):
+        """Unexpected report failures should bubble instead of looking like typed CLI errors."""
+        mock_get.side_effect = RuntimeError("boom")
+
+        result = runner.invoke(app, ["report", "bench-123"])
+
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "boom"
+
+    @patch("cli.main.time.sleep")
+    @patch("httpx.get")
+    def test_report_watch_waits_for_completion(self, mock_get, mock_sleep):
+        """Test that report --watch waits for benchmark completion."""
+        mock_response_in_progress = MagicMock()
+        mock_response_in_progress.json.return_value = {
+            "benchmark_id": "bench-123",
+            "status": "in_progress",
+        }
+        mock_response_in_progress.raise_for_status = MagicMock()
+
+        mock_response_completed = MagicMock()
+        mock_response_completed.json.return_value = _completed_report_data(agents=[])
+        mock_response_completed.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [mock_response_in_progress, mock_response_completed]
+
+        result = runner.invoke(app, ["report", "bench-123", "--watch"])
+        assert result.exit_code == 0
+        assert "Benchmark Complete" in result.output
+        mock_sleep.assert_called_once_with(5)
+
+
+class TestReportDemoMode:
+    """Tests for explicit report --demo command paths."""
+
+    @patch("cli.reporting_demo.render_full_demo_report")
+    @patch("httpx.get")
+    def test_report_demo_routes_to_demo_renderer(self, mock_get, mock_demo_render):
+        """Test that report --demo uses the demo rendering branch."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        def _render_demo_marker(report, console, show_per_case):
+            console.print(
+                f"DEMO_RENDERED show_per_case={show_per_case} benchmark={report.benchmark_id}"
+            )
+
+        mock_demo_render.side_effect = _render_demo_marker
+
+        result = runner.invoke(app, ["report", "bench-123", "--demo"])
+        assert result.exit_code == 0
+
+        output = _strip_ansi(result.output)
+        assert "Loading demo report for bench-123" in output
+        assert "DEMO_RENDERED show_per_case=True benchmark=bench-123" in output
+        mock_demo_render.assert_called_once()
+
+    @patch("cli.reporting_demo.render_full_demo_report")
+    @patch("httpx.get")
+    def test_report_demo_no_per_case_routes_with_flag(self, mock_get, mock_demo_render):
+        """Test that report --demo --no-per-case passes show_per_case=False."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        def _render_demo_marker(report, console, show_per_case):
+            console.print(
+                f"DEMO_RENDERED show_per_case={show_per_case} benchmark={report.benchmark_id}"
+            )
+
+        mock_demo_render.side_effect = _render_demo_marker
+
+        result = runner.invoke(app, ["report", "bench-123", "--demo", "--no-per-case"])
+        assert result.exit_code == 0
+
+        output = _strip_ansi(result.output)
+        assert "Loading demo report for bench-123" in output
+        assert "DEMO_RENDERED show_per_case=False benchmark=bench-123" in output
+        mock_demo_render.assert_called_once()
+
+    @patch("cli.reporting_demo.render_full_demo_report")
+    @patch("cli.main.time.sleep")
+    @patch("httpx.get")
+    def test_report_demo_watch_waits_then_renders(self, mock_get, mock_sleep, mock_demo_render):
+        """Test demo watch mode polls until complete, then renders demo output."""
+        mock_response_in_progress = MagicMock()
+        mock_response_in_progress.json.return_value = {
+            "benchmark_id": "bench-123",
+            "status": "in_progress",
+        }
+        mock_response_in_progress.raise_for_status = MagicMock()
+
+        mock_response_completed = MagicMock()
+        mock_response_completed.json.return_value = _completed_report_data(agents=[])
+        mock_response_completed.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [mock_response_in_progress, mock_response_completed]
+
+        def _render_demo_marker(report, console, show_per_case):
+            console.print(
+                f"DEMO_RENDERED show_per_case={show_per_case} benchmark={report.benchmark_id}"
+            )
+
+        mock_demo_render.side_effect = _render_demo_marker
+
+        result = runner.invoke(app, ["report", "bench-123", "--watch", "--demo"])
+        assert result.exit_code == 0
+
+        output = _strip_ansi(result.output)
+        assert "🚀 Loading demo report" in output
+        assert "DEMO_RENDERED show_per_case=True benchmark=bench-123" in output
+        mock_sleep.assert_called_once_with(5)
+        mock_demo_render.assert_called_once()
+
+
+class TestPerCaseFlag:
+    """Tests for the --per-case/--no-per-case flag on report command."""
+
+    def test_report_help_shows_per_case_flag(self):
+        """Test that report help shows --per-case/--no-per-case option."""
+        result = runner.invoke(app, ["report", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "--per-case" in output
+        assert "--no-per-case" in output
+
+    @patch("httpx.get")
+    def test_default_includes_per_case_sections(self, mock_get):
+        """Test default invocation shows per-case sections (per_case=True)."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-123"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        # Per-case sections should be present
+        assert "Step Breakdown" in output
+        assert "Insights" in output
+
+    @patch("httpx.get")
+    def test_no_per_case_suppresses_sections(self, mock_get):
+        """Test that --no-per-case suppresses per-case sections."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = _completed_report_data(
+            agents=[
+                {"agent_id": "gpt-4o-mini", "avg_score": 0.85, "p50_latency_ms": 1200},
+            ]
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-123", "--no-per-case"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        # Per-case sections should NOT be present
+        assert "Step Breakdown" not in output
+        assert "Insights" not in output
+
+    @patch("httpx.get")
+    @patch("cli.main.time.sleep")
+    def test_watch_unchanged_with_no_per_case(self, mock_sleep, mock_get):
+        """Test that --watch behavior is unchanged regardless of --no-per-case."""
+        mock_in_progress = MagicMock()
+        mock_in_progress.json.return_value = {
+            "benchmark_id": "bench-123",
+            "status": "in_progress",
+        }
+        mock_in_progress.raise_for_status = MagicMock()
+
+        mock_completed = MagicMock()
+        mock_completed.json.return_value = _completed_report_data(agents=[])
+        mock_completed.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [mock_in_progress, mock_completed]
+
+        result = runner.invoke(app, ["report", "bench-123", "--watch", "--no-per-case"])
+        assert result.exit_code == 0
+        assert "Benchmark Complete" in result.output
+        mock_sleep.assert_called_once_with(5)
+
+
+class TestRescoreCommand:
+    """Tests for the rescore command."""
+
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_scores_stored_response(self, mock_mongo_class, mock_engine_class):
+        """Test successful re-scoring uses stored run data and prints the score."""
+        mock_mongo = MagicMock()
+        mock_mongo_class.return_value = mock_mongo
+
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock()
+        mock_engine.rescore_step.return_value = StepScore(
+            run_id="run-123",
+            case_id="pr_001_missing_auth_check",
+            step_id="s1_findings",
+            strategy="llm_judge",
+            raw_score=0.75,
+            weight=2.0,
+            weighted_score=1.5,
+            latency_ms=1200,
+            passed=True,
+            details={"reasoning": "Judge reasoning text", "dimension_scores": {"grounding": 0.8}},
+        )
+        mock_engine_class.return_value = mock_engine
+
+        result = runner.invoke(
+            app,
+            [
+                "rescore",
+                "--run-id",
+                "run-123",
+                "--step",
+                "s1_findings",
+                "--strategy",
+                "llm_judge",
+                "--rubric",
+                "Test rubric",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Re-scoring run run-123, step s1_findings" in result.output
+        assert "Strategy: llm_judge" in result.output
+        assert "Rubric: Test rubric" in result.output
+        assert "Re-scoring complete" in result.output
+        assert "0.750" in result.output
+        assert "Judge Dimensions" in result.output
+        assert "Judge reasoning text" in result.output
+        mock_engine.rescore_step.assert_awaited_once_with(
+            run_id="run-123",
+            step_id="s1_findings",
+            strategy="llm_judge",
+            rubric="Test rubric",
+        )
+
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_json_output(self, mock_mongo_class, mock_engine_class):
+        """Test --json prints the full StepScore payload."""
+        mock_mongo_class.return_value = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock(
+            return_value=StepScore(
+                run_id="run-123",
+                case_id="pr_001_missing_auth_check",
+                step_id="s1_findings",
+                strategy="llm_judge",
+                raw_score=0.75,
+                weight=2.0,
+                weighted_score=1.5,
+                latency_ms=1200,
+                passed=True,
+                details={},
+            )
+        )
+        mock_engine_class.return_value = mock_engine
+
+        result = runner.invoke(
+            app,
+            [
+                "rescore",
+                "--run-id",
+                "run-123",
+                "--step",
+                "s1_findings",
+                "--strategy",
+                "llm_judge",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert '"weighted_score": 1.5' in result.output
+
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_fails_for_invalid_step(self, mock_mongo_class, mock_engine_class):
+        """Test invalid re-score combinations fail loudly."""
+        mock_mongo_class.return_value = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock(side_effect=ValueError("Step not found: missing_step"))
+        mock_engine_class.return_value = mock_engine
+
+        result = runner.invoke(
+            app,
+            [
+                "rescore",
+                "--run-id",
+                "run-123",
+                "--step",
+                "missing_step",
+                "--strategy",
+                "finding_match",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Error: Step not found: missing_step" in result.output
+
+    @patch("agentbench.scoring.engine.ScoringEngine")
+    @patch("agentbench.storage.mongo.MongoStorage")
+    def test_rescore_without_rubric(self, mock_mongo_class, mock_engine_class):
+        """Test rubric remains optional for non-LLM re-scoring."""
+        mock_mongo_class.return_value = MagicMock()
+        mock_engine = MagicMock()
+        mock_engine.rescore_step = AsyncMock(
+            return_value=StepScore(
+                run_id="run-123",
+                case_id="pr_001_missing_auth_check",
+                step_id="s1_findings",
+                strategy="finding_match",
+                raw_score=1.0,
+                weight=2.0,
+                weighted_score=2.0,
+                latency_ms=900,
+                passed=True,
+                details={},
+            )
+        )
+        mock_engine_class.return_value = mock_engine
+
+        result = runner.invoke(
+            app,
+            [
+                "rescore",
+                "--run-id",
+                "run-123",
+                "--step",
+                "s1_findings",
+                "--strategy",
+                "finding_match",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Strategy: finding_match" in result.output
+        assert "Rubric:" not in result.output
+        mock_engine.rescore_step.assert_awaited_once_with(
+            run_id="run-123",
+            step_id="s1_findings",
+            strategy="finding_match",
+            rubric=None,
+        )
+
+
+class TestServeCommand:
+    """Tests for the serve command."""
+
+    @patch("uvicorn.run")
+    def test_serve_uses_api_port_from_env_by_default(self, mock_run, monkeypatch):
+        """Serve should use API_PORT when no --port override is provided."""
+        monkeypatch.setenv("API_PORT", "8011")
+
+        result = runner.invoke(app, ["serve"])
+
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["port"] == 8011
+
+    @patch("httpx.post")
+    def test_run_uses_env_driven_api_port_for_default_url(self, mock_post, monkeypatch):
+        """Run should build its default API URL from API_PORT."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"benchmark_id": "bench-123"}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        monkeypatch.setenv("API_PORT", "8011")
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--workflow",
+                "wf_pr_review_v1",
+                "--case-set",
+                "pr_review_cases_v1",
+                "--agents",
+                "gpt-4o-mini",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert mock_post.call_args.args[0] == "http://localhost:8011/benchmarks"
+
+
+class TestStartAPIEntrypoint:
+    """Tests for the standalone API entrypoint."""
+
+    @patch.dict(os.environ, {"API_PORT": "8011", "API_HOST": "127.0.0.1"}, clear=False)
+    @patch("uvicorn.run")
+    @patch("agentbench.api.app.app", new=MagicMock(name="api_app"))
+    def test_start_api_uses_env_driven_host_and_port(self, mock_run):
+        """start_api.py should read API host and port from env-backed settings."""
+        runpy.run_module("start_api", run_name="__main__")
+
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["host"] == "127.0.0.1"
+        assert mock_run.call_args.kwargs["port"] == 8011
+
+
+class TestCLIHelp:
+    """Tests for CLI help and general functionality."""
+
+    def test_main_help(self):
+        """Test that main help shows all commands."""
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "AgentBench - AI Agent Evaluation Framework" in result.output
+        assert "run" in result.output
+        assert "report" in result.output
+        assert "list-cases" in result.output
+        assert "seed" in result.output
+        assert "rescore" in result.output
+        assert "version" in result.output
+
+    def test_run_help(self):
+        """Test that run command help shows options."""
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "--workflow" in output
+        assert "--case-set" in output
+        assert "--agents" in output
+        assert "--api-url" in output
+
+    def test_report_help(self):
+        """Test that report command help shows options."""
+        result = runner.invoke(app, ["report", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "--watch" in output
+        assert "--per-case" in output
+        assert "--no-per-case" in output
+
+    def test_list_cases_help(self):
+        """Test that list-cases command help shows options."""
+        result = runner.invoke(app, ["list-cases", "--help"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.output)
+        assert "--case-set" in output
+        assert "--fixtures-dir" in output
+
+
+class TestLegacyReport:
+    """Tests for backward-compatible legacy report handling."""
+
+    @patch("httpx.get")
+    def test_legacy_report_renders(self, mock_get):
+        """Legacy report without per_case_topics renders without crashing."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "benchmark_id": "bench-legacy-001",
+            "workflow_id": "wf_pr_review_v1",
+            "case_set_id": "pr_review_cases_v1",
+            "created_at": "2026-03-15T08:00:00Z",
+            "case_count": 2,
+            "status": "completed",
+            "agents": [
+                {
+                    "agent_id": "claude-haiku-4-5",
+                    "avg_score": 0.85,
+                    "p50_latency_ms": 2000,
+                    "p95_latency_ms": 4000,
+                    "failure_rate": 0.0,
+                    "step_breakdown": {},
+                },
+            ],
+            "per_case_scores": {
+                "pr_001_missing_auth_check": {"claude-haiku-4-5": 0.90},
+                "pr_002_missing_test_coverage": {"claude-haiku-4-5": 0.80},
+            },
+            # per_case_topics intentionally omitted
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = runner.invoke(app, ["report", "bench-legacy-001"])
+        assert result.exit_code == 0
+        assert "claude-haiku-4-5" in result.output
