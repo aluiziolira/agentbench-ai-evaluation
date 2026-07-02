@@ -1,0 +1,101 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# Docker files (not needed in build context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Data directories (mounted at runtime)
+data/
+!data/.gitkeep
+
+# Documentation
+docs/
+# Keep README.md for pyproject.toml package metadata
+!README.md
+
+# Test files and directories
+tests/
+test_*.py
+*_test.py
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+
+# Logs
+*.log
+logs/
+
+# Package manager lock files (not needed for build)
+# uv.lock  <- needed for reproducible UV builds
+poetry.lock
+Pipfile.lock
+yarn.lock
+package-lock.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+.cache/
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
