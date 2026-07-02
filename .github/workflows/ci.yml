@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   secret-scan:
     name: Secret Scan (gitleaks)
@@ -17,15 +21,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-        with:
-          args: detect --source . --report-format sarif --report-path gitleaks.sarif
-
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: ${{ always() && hashFiles('gitleaks.sarif') != '' }}
-        continue-on-error: true
-        with:
-          sarif_file: gitleaks.sarif
+          GITLEAKS_ENABLE_COMMENTS: "false"
 
   quality:
     name: Quality Checks

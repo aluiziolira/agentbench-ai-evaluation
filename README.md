@@ -1,6 +1,6 @@
 # AgentBench
 
-A minimal AI agent evaluation framework for PR review behavior, built with event-driven architecture.
+**Benchmark AI code-review agents against versioned, reproducible test cases — and re-score any past run under a new rubric without paying for a single new API call.**
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -10,45 +10,46 @@ A minimal AI agent evaluation framework for PR review behavior, built with event
 
 *Demo recorded with [VHS](https://github.com/charmbracelet/vhs) ([`docs/demo.tape`](docs/demo.tape)) against mocked LLM adapters: the full pipeline — Redis Streams orchestration, deterministic + LLM-judge scoring, MongoDB reports, stored-output re-scoring — runs for real; only the provider API calls are stubbed, so the demo is reproducible offline at zero API cost.*
 
-AgentBench runs AI agents against seeded PR review cases, scores their findings through deterministic matching, and produces comparative benchmark reports.
+AgentBench runs AI agents (Claude, GPT) against seeded PR-review cases, scores their findings with both deterministic matching and an LLM judge, and produces comparative benchmark reports over an event-driven pipeline.
 
-- Event-driven orchestration coordinates dispatch, scoring, and reporting through Redis Streams
-- Deterministic finding-match scoring produces reproducible results without stochastic resampling
-- Dual-layer storage (MongoDB for reports, raw I/O files) supports offline re-scoring without re-invoking agents
-- Committed fixture sets provide stable, versioned benchmarks that run locally with no external dependencies
+**At a glance**
 
-AgentBench is not a production PR review bot, a GitHub App, a Jira integration, or a platform for evaluating agents against live repositories.
+| | |
+|---|---|
+| **Pipeline** | Event-driven: Redis Streams orchestration, MongoDB reports, raw I/O archive |
+| **Scoring** | Deterministic `finding_match` + rubric-configurable `llm_judge` |
+| **Reproducibility** | 8 versioned fixture cases; stored outputs re-scorable offline at zero cost |
+| **Quality bar** | 462 unit tests in ~5s, 1.6:1 test-to-source ratio, `mypy --strict`, ruff, CI + secret scanning |
 
-## Benchmark Proof
+## The Problem
 
-End-to-end validated against 8 fixed cases, these metrics show how the framework scores and ranks agents by review accuracy, speed, and reliability.
+Evaluating AI agents against each other is harder than it sounds. Most evaluation setups pull inputs from live sources: real GitHub pull requests, scraped Jira tickets, or provider-specific data feeds. That creates a comparability problem:
 
-### Agent Performance Comparison
+- **Scores drift** — when inputs change between runs, you can't tell whether the agent improved or the data did.
+- **Results can't be compared** — different teams pulling from different providers produce numbers that don't line up.
+- **Iteration costs money** — re-scoring under a new rubric means re-invoking the agent, because the raw output was never stored.
 
-Sample run on 8 PR review cases (E2E validated 2026-04-04):
+The result is benchmarks that look precise but can't be reproduced, compared, or iterated on without spending more API credits.
+
+AgentBench solves this by **fixing the inputs and storing the outputs**. Every benchmark case is a committed fixture — a ticket, a diff, and a ground-truth file that never changes unless the case set is explicitly versioned. Every agent response is persisted as raw I/O, so re-scoring costs nothing. Every agent runs against the same workflow and case set, making cross-agent comparison a direct measurement rather than an approximation.
+
+**Deliberately out of scope:** AgentBench is not a production PR-review bot, a GitHub App, a Jira integration, or a platform for evaluating agents against live repositories. It does not apply patches, run test suites, or execute the code under review. Fixing the benchmark to a single workflow and a versioned case set is a design choice, not a missing feature.
+
+## Results
+
+Sample run on 8 PR-review cases (E2E validated 2026-04-04; scores from the LLM-judged `s2_review_summary` step):
 
 | Agent | Avg Score | P50 Latency | P95 Latency | Failure Rate |
 |-------|-----------|-------------|-------------|--------------|
 | **claude-haiku-4-5** | **0.913** | 2,500ms | 5,000ms | 0.0% |
 | **gpt-4o-mini** | **0.888** | 1,500ms | 7,500ms | 0.0% |
 
-**Key Observations:**
-- Claude Haiku achieved highest score (91.3%) - 2.8% better than GPT-4o-mini
+- Claude Haiku scored highest (91.3%), 2.8% ahead of GPT-4o-mini
 - GPT-4o-mini was faster on P50 latency (1.5s vs 2.5s)
-- Both agents had 100% API success rate
-- Scores from `s2_review_summary` LLM-judged step
+- Both agents completed all runs with a 0% failure rate
 
-*Run your own comparison:*
-```bash
-just demo        # Full demo with both agents
-# Or for custom comparison:
-# uv run python -m cli.main run \
-#   --workflow wf_pr_review_v1 \
-#   --case-set pr_review_cases_v1 \
-#   --agents gpt-4o-mini --agents claude-haiku-4-5
-```
-
-### Per-Case Breakdown
+<details>
+<summary><strong>Per-case breakdown</strong></summary>
 
 | Case | Claude Haiku | GPT-4o-mini | Topic |
 |------|--------------|-------------|-------|
@@ -61,21 +62,18 @@ just demo        # Full demo with both agents
 | pr_004_contract_breaking_change | 0.88 | **0.88** | API Compatibility |
 | pr_005_missing_error_handling | 0.88 | **0.88** | Error Handling |
 
-## Problem Statement
+</details>
 
-Evaluating AI agents against each other is harder than it sounds. Most evaluation setups pull inputs from live sources: real GitHub pull requests, scraped Jira tickets, or provider-specific data feeds. That creates a comparability problem. When the inputs change between runs, scores drift. When different teams use different providers, results can't be compared side by side. When you need to re-score under a different rubric, you have to re-invoke the agent because the raw output wasn't stored. The result is benchmarks that look precise but can't be reproduced, can't be compared, and can't be iterated on without spending more API credits.
+Run your own comparison:
 
-AgentBench solves this by fixing the inputs and storing the outputs. Every benchmark case is a committed fixture: a ticket, a diff, and a ground-truth file that never changes unless the case set is explicitly versioned. Every agent response is persisted as raw I/O, so re-scoring costs nothing. Every agent runs against the same workflow and the same case set, making cross-agent comparison a direct measurement rather than an approximation.
-
-### Out of Scope
-
-AgentBench is intentionally limited to what it can reproduce and compare. It is not a production PR review bot, not a GitHub App or Jira integration, and not a platform for evaluating agents against live repositories. It does not apply patches, run test suites, or execute the code under review. Fixing the benchmark scope to a single workflow and a versioned case set is a deliberate design choice, not a missing feature.
-
-## Technical Decisions
-
-AgentBench routes every step transition through Redis Streams instead of calling each service directly. A simpler design would have the orchestrator invoke dispatchers, scorers, and aggregators as synchronous functions within the same call stack, and for a single-user evaluation tool that would work fine. The trade-off is more event choreography and more moving parts: stream producers, consumer groups, and event schemas that all need to stay aligned. In exchange for that complexity, each service gets a hard boundary and can be reasoned about in isolation. Dispatch, scoring, and aggregation all react to the same event bus, so none of them holds a direct reference to the others. The result is pipeline behavior that mirrors production message-bus architectures, where services consume events rather than waiting on function calls. That modularity matters because it means swapping a scoring strategy or adding a new aggregation step requires wiring a new consumer rather than refactoring the orchestrator's control flow.
-
-Storage splits intentionally between MongoDB for structured reports and the local filesystem for raw agent I/O. A single-store approach, whether MongoDB for everything or flat files for everything, would be simpler to set up but would make re-scoring expensive or reports harder to query. MongoDB stores benchmark metadata, scores, and per-case breakdowns with typed Pydantic validation and index-backed queries, while raw prompt and response pairs live as files that the scoring engine reads directly. Two scoring roles cover different needs: `finding_match` compares agent findings against ground truth with deterministic label matching for reproducible baselines, and `llm_judge` sends the full review to another LLM for qualitative assessment under a configurable rubric. The supporting infrastructure reflects backend best practices drawn from the codebase itself: async service composition for non-blocking orchestration, retries with exponential backoff and circuit breakers for API resilience, strict tooling with ruff formatting and mypy typing, and explicit index setup on query-heavy MongoDB collections. This split means any stored run can be re-scored under a new rubric without re-invoking the agent, and every scoring decision traces back to the exact inputs that produced it.
+```bash
+just demo        # Full demo with both agents
+# Or for a custom comparison:
+# uv run python -m cli.main run \
+#   --workflow wf_pr_review_v1 \
+#   --case-set pr_review_cases_v1 \
+#   --agents gpt-4o-mini --agents claude-haiku-4-5
+```
 
 ## Architecture
 
@@ -85,9 +83,9 @@ Storage splits intentionally between MongoDB for structured reports and the loca
 └─────────────┘     │              │     │   Streams   │
                     └──────────────┘     └──────┬──────┘
                                                 │
-           ┌─────────────────────────────────────┼─────┐
-           │                                     │     │
-           ▼                                     ▼     ▼
+           ┌────────────────────────────────────┼──────────┐
+           │                                    │          │
+           ▼                                    ▼          ▼
     ┌────────────┐                      ┌───────────┐ ┌──────────┐
     │ Dispatcher │                      │  Scoring  │ │Aggregator│
     │            │                      │  Engine   │ │          │
@@ -107,6 +105,8 @@ Storage splits intentionally between MongoDB for structured reports and the loca
     └────────────┘
 ```
 
+Each component is a deliberately simplified stand-in for its production counterpart:
+
 | Component | Simplified Version | Production Analogue |
 |-----------|-------------------|---------------------|
 | Redis Streams | Single Redis instance | Kafka / RabbitMQ |
@@ -115,9 +115,26 @@ Storage splits intentionally between MongoDB for structured reports and the loca
 | Single Process | Asyncio tasks | Kubernetes / ECS |
 | In-memory scoring | Pydantic models | Dedicated scoring service |
 
+## Design Decisions
+
+**Event-driven orchestration over direct calls.** Every step transition routes through Redis Streams instead of synchronous function calls. For a single-user evaluation tool, direct calls would work fine — the trade-off accepted here is more event choreography (producers, consumer groups, event schemas that must stay aligned) in exchange for hard service boundaries. Dispatch, scoring, and aggregation all react to the same event bus and hold no references to each other, mirroring production message-bus architectures. Swapping a scoring strategy or adding an aggregation step means wiring a new consumer, not refactoring the orchestrator's control flow.
+
+**Split storage: MongoDB for reports, filesystem for raw I/O.** A single store would be simpler to set up, but would make re-scoring expensive or reports hard to query. MongoDB holds benchmark metadata, scores, and per-case breakdowns with typed Pydantic validation and index-backed queries; raw prompt/response pairs live as files the scoring engine reads directly. Any stored run can be re-scored under a new rubric without re-invoking the agent, and every scoring decision traces back to the exact inputs that produced it.
+
+**Two scoring strategies for two different questions.** `finding_match` compares agent findings against ground truth with deterministic label matching — reproducible baselines with no stochastic resampling. `llm_judge` sends the full review to another LLM for qualitative assessment under a configurable rubric — nuance that string matching can't capture.
+
+**Reliability and correctness details baked in:**
+
+- Explicit per-request timeouts with provider-error normalization on every adapter call
+- Fail-fast run isolation — a single failed run never stalls a benchmark
+- Idempotent report persistence guarded by unique MongoDB indexes
+- Explicit index setup on query-heavy collections
+- Async service composition for non-blocking orchestration
+- `mypy --strict` typing and ruff lint/format enforced in CI
+
 ## Why Seeded Fixtures?
 
-The alternative is live ingestion: pulling PRs and tickets from GitHub, Jira, or GitLab at runtime. That approach introduces non-determinism, rate limits, auth complexity, and privacy risk. Seeded fixtures eliminate all of those problems while keeping the evaluation grounded in realistic review scenarios.
+The alternative is live ingestion — pulling PRs and tickets from GitHub, Jira, or GitLab at runtime. That introduces non-determinism, rate limits, auth complexity, and privacy risk. Seeded fixtures eliminate all four while keeping the evaluation grounded in realistic review scenarios:
 
 | Seeded Fixtures | Live Ingestion |
 |-----------------|----------------|
@@ -141,7 +158,7 @@ rules for orders, including percentage discounts, fixed amount discounts,
 and tiered discounts based on order value.
 ```
 
-**Diff Excerpt:**
+**Diff excerpt:**
 ```python
 # app/services/discount.py (88 lines added)
 def calculate_discount(order, discount_code):
@@ -153,13 +170,13 @@ def calculate_discount(order, discount_code):
     # ... more logic
 ```
 
-**Ground Truth Expected Finding:**
+**Ground-truth expected finding:**
 - **Issue**: Missing unit tests for discount calculations
 - **Severity**: High
 - **File**: `app/services/discount.py`
 - **Line span**: 1-88
 
-**Claude Haiku Response (s1_findings):**
+**Claude Haiku response (s1_findings):**
 ```json
 {
   "findings": [
@@ -175,7 +192,7 @@ def calculate_discount(order, discount_code):
 }
 ```
 
-**GPT-4o-mini Response (s1_findings):**
+**GPT-4o-mini response (s1_findings):**
 ```json
 {
   "findings": [
@@ -191,7 +208,7 @@ def calculate_discount(order, discount_code):
 }
 ```
 
-**Review Summary (Claude Haiku s2_review_summary):**
+**Review summary (Claude Haiku s2_review_summary):**
 > The implementation is missing comprehensive unit tests for the discount
 > calculation logic, particularly around edge cases for tiered discounts and
 > discount code validation. The service lacks input validation on the
@@ -200,9 +217,11 @@ def calculate_discount(order, discount_code):
 > for percentage calculations (e.g., 0%, 100%), invalid discount codes, and
 > boundary conditions for tiered discount thresholds before merging.
 
-## Re-Scoring Demo
+Note the divergence: Haiku's structured `s1_findings` misses the seeded finding while GPT-4o-mini nails it, yet both score 0.92 on this case — the headline scores come from the LLM-judged `s2_review_summary` step, and Haiku's summary does cover the missing tests. Capturing both steps is exactly why the framework stores every intermediate output rather than just a final number.
 
-AgentBench supports re-scoring stored outputs without re-invoking agents:
+## Re-Scoring Stored Runs
+
+AgentBench re-scores stored outputs without re-invoking agents:
 
 ```bash
 # Re-score a summary with a different rubric
@@ -214,18 +233,20 @@ uv run python -m cli.main rescore \
 ```
 
 The command prints a compact score summary (with per-dimension judge scores when available); pass `--json` for the full `StepScore` payload.
-**Why This Matters:**
+
+**Why this matters:**
 - Deterministic `finding_match` scores remain stable
-- LLM-judged scores change when rubric changes
-- Enables experimentation with scoring criteria
-- No additional API costs for re-scoring
+- LLM-judged scores change when the rubric changes
+- Scoring criteria become something you can experiment with
+- Re-scoring costs zero additional API credits
 
 ## Five-Minute Local Run
 
 Requires Python 3.12+, Docker, and API keys (OpenAI + Anthropic).
 
 ```bash
-git clone <repo-url> && cd agentbench-ai-evaluation
+git clone https://github.com/aluiziolira/agentbench-ai-evaluation.git
+cd agentbench-ai-evaluation
 pip install uv && uv sync
 cp .env.example .env          # Add OPENAI_API_KEY and ANTHROPIC_API_KEY
 
@@ -236,22 +257,11 @@ just init
 just dev
 
 # In another terminal, run the demo (auto-starts benchmark + watches with visuals)
-just demo
-
-# Or for a faster demo (single agent, ~1.5 min instead of ~3 min):
-# just demo-quick
-```
-
-The CLI includes an enhanced demo mode with visual highlights for performance grading, score progress bars, and latency metrics.
-
-The `just demo` command runs a full benchmark with two agents and displays the report automatically:
-
-```bash
 just demo        # Full benchmark (~3 min, 2 agents, 8 cases)
 just demo-quick  # Fast run (~1.5 min, 1 agent, 8 cases)
 ```
 
-View existing benchmarks with:
+The CLI includes an enhanced demo mode with visual highlights for performance grading, score progress bars, and latency metrics. View existing benchmarks with:
 
 ```bash
 # View completed benchmark with demo visuals
@@ -261,58 +271,16 @@ uv run python -m cli.main report {benchmark_id} --demo
 uv run python -m cli.main report {benchmark_id} --demo --no-per-case
 ```
 
-## CI/CD
-
-This project uses [Just](https://just.systems) for task automation and GitHub Actions for CI/CD.
-
-### Continuous Integration
-
-The CI pipeline runs on every pull request and push to main:
-
-- **Secret Scanning**: gitleaks detects potential secrets in the codebase
-- **Quality Gate**: Runs linting, type checking, and unit tests via `just ci-pr`
-
-All quality checks are orchestrated through the justfile, making it easy to run the same checks locally. Run `just ci-pr` to execute the full quality gate before submitting a PR.
-
-### Manual Integration Tests
-
-Integration tests make real API calls to OpenAI and Anthropic (~$0.50-1.00 per run).
-They are triggered manually via the GitHub Actions "Integration" workflow.
-
-To run integration tests via GitHub Actions:
-1. Go to Actions → Integration
-2. Click "Run workflow"
-3. (Optional) Specify a pytest selector
-4. The workflow uses Just recipes to orchestrate services and tests
-
-To run integration tests locally (requires API keys):
-
-```bash
-# Start infrastructure and services
-just init && just services-bg
-
-# Run integration tests (manual only - costs money)
-AGENTBENCH_INTEGRATION_TEST=1 just test-integration
-```
-
-### Reusable Setup Action
-
-The `.github/actions/setup-agentbench` composite action encapsulates the setup logic
-(installing just, Python, uv, caching, syncing dependencies) to ensure consistency
-across workflows.
-
 ## Testing
 
-### Quick Reference
-
+| Suite | Command | Time | Dependencies |
+|-------|---------|------|--------------|
 | Unit | `just test-unit` | ~5s | None (all mocked) |
 | Coverage | `just coverage` | ~10s | None |
-| Full Check | `just check` | ~15s | Lint + Typecheck + Tests |
-| CI Quality Gate | `just ci-pr` | ~20s | Same as CI pipeline |
+| Full check | `just check` | ~15s | Lint + typecheck + tests |
+| CI quality gate | `just ci-pr` | ~20s | Same as CI pipeline |
 
-**Unit Tests**
-
-Mock external dependencies and run in ~5 seconds (330 tests). Coverage spans adapters, storage, orchestration, scoring, API, CLI, and workflow validation.
+**Unit tests** mock all external dependencies and run in ~5 seconds (462 tests). Coverage spans adapters, storage, orchestration, scoring, API, CLI, and workflow validation — the test suite is larger than the source it covers (1.6:1 by line count).
 
 ```bash
 just test-unit                # All unit tests (fast)
@@ -321,23 +289,26 @@ just check                    # Full quality gate (lint + typecheck + tests)
 just test tests/unit/test_adapters.py -v  # Single module with verbosity
 ```
 
-**Integration Tests (Manual-Only via GitHub Actions or Local)**
-
-⚠️  **Never run in CI automatically.** These tests make **real API calls** to OpenAI/Anthropic and cost ~$0.50-1.00 per run.
-
-Requirements: Docker Compose, `.env` with API keys, gate flag `AGENTBENCH_INTEGRATION_TEST=1`, and running services.
+**Integration tests** make real API calls to OpenAI and Anthropic (~$0.50–1.00 per run), so they never run automatically in CI. They are gated behind `AGENTBENCH_INTEGRATION_TEST=1` and triggered manually — via the GitHub Actions "Integration" workflow (Actions → Integration → Run workflow) or locally:
 
 ```bash
 # Start infrastructure and services (background mode)
 just init && just services-bg
 
-# Or use dev mode for foreground with log watching
-# just dev
-
 # Run integration tests (manual only - costs money)
 AGENTBENCH_INTEGRATION_TEST=1 just test-integration
+```
 
-Tests validate: multi-agent pipeline completion, single-agent execution, and artifact storage.
+Integration tests validate multi-agent pipeline completion, single-agent execution, and artifact storage.
+
+## CI/CD
+
+Task automation runs through [Just](https://just.systems), and GitHub Actions runs the same recipes in CI — `just ci-pr` locally executes the identical quality gate that gates every PR:
+
+- **Secret scanning** — gitleaks detects potential secrets in the codebase
+- **Quality gate** — lint (ruff), type check (`mypy --strict`), and unit tests via `just ci-pr`
+
+The `.github/actions/setup-agentbench` composite action encapsulates setup (just, Python, uv, caching, dependency sync) so every workflow stays consistent.
 
 ## API Endpoints
 

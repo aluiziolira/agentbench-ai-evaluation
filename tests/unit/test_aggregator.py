@@ -44,6 +44,7 @@ def mock_mongo_storage():
     storage.create_run_report = AsyncMock()
     storage.get_run_report = AsyncMock()
     storage.create_benchmark_report = AsyncMock()
+    storage.list_runs = AsyncMock(return_value=[])
     return storage
 
 
@@ -617,6 +618,78 @@ class TestBenchmarkReportGeneration:
         # Assert
         mock_mongo_storage.create_benchmark_report.assert_not_called()
         assert "No run reports found for benchmark bench-1" in caplog.text
+
+    async def test_failure_rate_reflects_failed_runs(
+        self, aggregator, mock_mongo_storage, mock_redis_storage
+    ):
+        """failure_rate is nonzero for an agent with a failed run, 0.0 otherwise."""
+        # Arrange - only the successful runs produce RunReports.
+        mock_redis_storage.is_benchmark_complete.return_value = True
+        mock_redis_storage.get_benchmark_completed_runs.return_value = {"run-1", "run-3"}
+
+        run_reports = [
+            RunReport(
+                run_id="run-1",
+                benchmark_id="bench-1",
+                case_id="case-1",
+                case_tags=["auth"],
+                agent_id="gpt-4o-mini",
+                workflow_id="wf_pr_review_v1",
+                total_score=2.0,
+                step_scores=[],
+                total_latency_ms=500,
+                completed_at=datetime.now(UTC).isoformat(),
+            ),
+            RunReport(
+                run_id="run-3",
+                benchmark_id="bench-1",
+                case_id="case-2",
+                case_tags=["auth"],
+                agent_id="claude-haiku-4-5",
+                workflow_id="wf_pr_review_v1",
+                total_score=1.8,
+                step_scores=[],
+                total_latency_ms=550,
+                completed_at=datetime.now(UTC).isoformat(),
+            ),
+        ]
+        mock_mongo_storage.get_run_report.side_effect = lambda run_id: next(
+            (r for r in run_reports if r.run_id == run_id), None
+        )
+
+        def _run(run_id, agent_id, state):
+            return EvaluationRun(
+                run_id=run_id,
+                benchmark_id="bench-1",
+                workflow_id="wf_pr_review_v1",
+                workflow_version="1.0.0",
+                case_set_id="pr_review_cases_v1",
+                case_id="case-1",
+                agent_id=agent_id,
+                agent_config={},
+                state=state,
+                current_step=1,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+
+        # gpt-4o-mini: 1 success + 1 failure -> 0.5; claude-haiku-4-5: 1 success -> 0.0
+        all_runs = [
+            _run("run-1", "gpt-4o-mini", RunState.COMPLETED),
+            _run("run-2", "gpt-4o-mini", RunState.FAILED),
+            _run("run-3", "claude-haiku-4-5", RunState.COMPLETED),
+        ]
+        mock_mongo_storage.list_runs.return_value = all_runs
+        mock_mongo_storage.get_run.return_value = all_runs[0]
+
+        # Act
+        await aggregator._generate_benchmark_report("bench-1")
+
+        # Assert
+        report = mock_mongo_storage.create_benchmark_report.call_args[0][0]
+        gpt_summary = next(a for a in report.agents if a.agent_id == "gpt-4o-mini")
+        claude_summary = next(a for a in report.agents if a.agent_id == "claude-haiku-4-5")
+        assert gpt_summary.failure_rate == 0.5
+        assert claude_summary.failure_rate == 0.0
 
 
 class TestPercentileCalculation:
