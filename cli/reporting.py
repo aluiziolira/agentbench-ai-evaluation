@@ -32,26 +32,28 @@ def order_agents(agents: list[AgentSummary]) -> list[AgentSummary]:
 
 
 def group_cases_by_topic(
-    per_case_scores: dict[str, dict[str, float]],
+    per_case_scores: dict[str, dict[str, float | None]],
     per_case_topics: dict[str, str],
-) -> dict[str, list[tuple[str, dict[str, float]]]]:
+) -> dict[str, list[tuple[str, dict[str, float | None]]]]:
     """Group cases under canonical topics.
 
     Returns a dict mapping topic name -> list of (case_id, agent_scores).
     """
-    groups: dict[str, list[tuple[str, dict[str, float]]]] = {}
+    groups: dict[str, list[tuple[str, dict[str, float | None]]]] = {}
     for case_id, scores in per_case_scores.items():
         topic = per_case_topics.get(case_id, "Other")
         groups.setdefault(topic, []).append((case_id, scores))
     return groups
 
 
-def sort_cases(cases: list[tuple[str, dict[str, float]]]) -> list[tuple[str, dict[str, float]]]:
+def sort_cases(
+    cases: list[tuple[str, dict[str, float | None]]],
+) -> list[tuple[str, dict[str, float | None]]]:
     """Sort cases by case_id within a topic group."""
     return sorted(cases, key=lambda c: c[0])
 
 
-def compute_winners(scores: dict[str, float]) -> set[str]:
+def compute_winners(scores: dict[str, float | None]) -> set[str]:
     """Return agent_ids with the highest non-null score (handles ties).
 
     Filters out None values. If all scores are None, returns empty set.
@@ -72,7 +74,7 @@ def _topic_sort_key(topic: str) -> tuple[int, str]:
 
 def compute_insights(
     agents: list[AgentSummary],
-    per_case_scores: dict[str, dict[str, float]],
+    per_case_scores: dict[str, dict[str, float | None]],
     per_case_topics: dict[str, str],
 ) -> dict[str, Any]:
     """Compute overall leader, per-topic leaders, and biggest score spread.
@@ -104,7 +106,7 @@ def compute_insights(
                 if s is not None:
                     agent_totals.setdefault(aid, []).append(s)
 
-        agent_avgs: dict[str, float] = {}
+        agent_avgs: dict[str, float | None] = {}
         for aid, vals in agent_totals.items():
             agent_avgs[aid] = sum(vals) / len(vals)
 
@@ -151,11 +153,12 @@ def render_summary_table(agents: list[AgentSummary]) -> Table:
     ordered = order_agents(agents)
 
     table = Table(title="Agent Performance", show_lines=False)
-    table.add_column("Agent", style="cyan")
+    table.add_column("Agent", style="cyan", min_width=22)
     table.add_column("Avg Score", justify="right")
     table.add_column("P50 Latency", justify="right", style="yellow")
     table.add_column("P95 Latency", justify="right", style="yellow")
     table.add_column("Failure Rate", justify="right")
+    table.add_column("Scoring Fail", justify="right")
 
     # Find overall winners
     if ordered:
@@ -166,12 +169,16 @@ def render_summary_table(agents: list[AgentSummary]) -> Table:
 
     for agent in ordered:
         score_text = _render_score_cell(agent.avg_score, agent.agent_id in winners)
+        scoring_fail_text = f"{agent.scoring_failure_rate:.0%}"
+        if agent.scoring_failure_rate > 0:
+            scoring_fail_text = f"[red]{scoring_fail_text}[/]"
         table.add_row(
             agent.agent_id,
             score_text,
             f"{agent.p50_latency_ms}ms",
             f"{agent.p95_latency_ms}ms",
             f"{agent.failure_rate:.0%}",
+            scoring_fail_text,
         )
 
     return table
@@ -242,7 +249,7 @@ def render_step_breakdown(agents: list[AgentSummary]) -> Table:
 
     for step in sorted_steps:
         # Compute winners for this step across agents
-        step_scores: dict[str, float] = {}
+        step_scores: dict[str, float | None] = {}
         for agent in ordered:
             score = agent.step_breakdown.get(step)
             if score is not None:
@@ -319,6 +326,8 @@ def render_rescore_summary(score: Any) -> RenderableType:
     table.add_row("Score", f"{score.raw_score:.3f}")
     table.add_row("Weighted", f"{score.weighted_score:.3f} (weight {score.weight:g})")
     table.add_row("Passed", "[green]yes[/]" if score.passed else "[red]no[/]")
+    if score.scoring_failed:
+        table.add_row("Scoring", f"[red]FAILED ({score.error_type})[/]")
 
     renderables: list[RenderableType] = [table]
 

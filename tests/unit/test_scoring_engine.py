@@ -652,6 +652,82 @@ class TestEventEmission:
         assert "weight" in event.payload
         assert event.payload["latency_ms"] == 1000
         assert "passed" in event.payload
+        assert event.payload["scoring_failed"] is False
+        assert "error_type" in event.payload
+
+    @pytest.mark.asyncio
+    async def test_run_emits_scoring_failed_payload(
+        self, scoring_engine, sample_run, sample_workflow, sample_case
+    ):
+        """A failed StepScore from the strategy propagates scoring_failed/error_type."""
+        scoring_engine.mongo_storage.get_run.return_value = sample_run
+        scoring_engine.mongo_storage.get_workflow.return_value = sample_workflow
+
+        run_dir = scoring_engine.raw_io_dir / sample_run.run_id
+        run_dir.mkdir()
+        io_file = run_dir / "s1_findings.json"
+        io_data = {
+            "run_id": sample_run.run_id,
+            "case_set_id": sample_run.case_set_id,
+            "case_id": sample_run.case_id,
+            "step_id": "s1_findings",
+            "agent_id": sample_run.agent_id,
+            "request": {"prompt": "test"},
+            "response": "irrelevant",
+            "latency_ms": 1000,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        io_file.write_text(json.dumps(io_data))
+
+        envelope = MagicMock()
+        envelope.event_type = AGENT_RESPONSE_RECEIVED
+        envelope.payload = {
+            "run_id": sample_run.run_id,
+            "step_id": "s1_findings",
+            "latency_ms": 1000,
+        }
+        envelope.correlation_id = sample_run.run_id
+        envelope.delivery_message_id = "123-0"
+        envelope.delivery_stream = STREAM_EVAL_STEPS
+        envelope.delivery_consumer_group = "scoring"
+
+        call_count = 0
+
+        async def mock_consume(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                yield envelope
+                scoring_engine._running = False
+
+        scoring_engine.event_bus.consume = mock_consume
+
+        failed_score = StepScore(
+            run_id=sample_run.run_id,
+            case_id=sample_run.case_id,
+            step_id="s1_findings",
+            strategy="llm_judge",
+            raw_score=0.0,
+            weighted_score=0.0,
+            latency_ms=1000,
+            passed=False,
+            scoring_failed=True,
+            error_type="parse_error",
+            details={"parse_failed": True, "error_type": "parse_error"},
+        )
+
+        with (
+            patch("agentbench.scoring.engine.load_case") as mock_load_case,
+            patch.object(scoring_engine, "_score_step", new=AsyncMock(return_value=failed_score)),
+        ):
+            mock_load_case.return_value = sample_case
+            await scoring_engine.run()
+
+        scoring_engine.event_bus.publish.assert_called_once()
+        call_args = scoring_engine.event_bus.publish.call_args
+        event = call_args[0][1]
+        assert event.payload["scoring_failed"] is True
+        assert event.payload["error_type"] == "parse_error"
 
 
 class TestStop:

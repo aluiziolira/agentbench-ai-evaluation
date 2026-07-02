@@ -63,6 +63,8 @@ ALLOWED_PAYLOAD_FIELDS = {
     "weighted_score",
     "passed",
     "details",
+    "scoring_failed",
+    "error_type",
 }
 
 # Forbidden payload content patterns (field names or content patterns)

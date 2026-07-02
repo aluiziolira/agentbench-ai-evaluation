@@ -348,7 +348,7 @@ def render_step_breakdown_demo(agents: list[AgentSummary]) -> Table:
         )
 
     for step in sorted_steps:
-        step_scores: dict[str, float] = {}
+        step_scores: dict[str, float | None] = {}
         for agent in ordered:
             score = agent.step_breakdown.get(step)
             if score is not None:
@@ -437,7 +437,7 @@ def render_insights_demo(insights: dict[str, Any]) -> RenderableType:
 
 def render_topic_performance_chart(
     agents: list[AgentSummary],
-    per_case_scores: dict[str, dict[str, float]],
+    per_case_scores: dict[str, dict[str, float | None]],
     per_case_topics: dict[str, str],
 ) -> RenderableType:
     """Render a topic performance comparison chart."""

@@ -13,6 +13,8 @@ class StepScore(BaseModel):
     weighted_score: float
     latency_ms: int
     passed: bool
+    scoring_failed: bool = False
+    error_type: str | None = None  # None | "api_error" | "parse_error"
     details: dict[str, Any] = {}
 
 
@@ -27,6 +29,7 @@ class RunReport(BaseModel):
     step_scores: list[StepScore]
     total_latency_ms: int
     completed_at: str
+    scoring_failures: int = 0
 
 
 class AgentSummary(BaseModel):
@@ -36,6 +39,7 @@ class AgentSummary(BaseModel):
     p95_latency_ms: int
     failure_rate: float
     step_breakdown: dict[str, float]
+    scoring_failure_rate: float = 0.0
 
 
 class BenchmarkReport(BaseModel):
@@ -45,5 +49,5 @@ class BenchmarkReport(BaseModel):
     created_at: str
     case_count: int
     agents: list[AgentSummary]
-    per_case_scores: dict[str, dict[str, float]]
+    per_case_scores: dict[str, dict[str, float | None]]
     per_case_topics: dict[str, str] = {}

@@ -454,6 +454,10 @@ class TestBenchmarkReportGeneration:
         # Check per-case topics
         assert report.per_case_topics["case-1"] == "Auth/Security"  # tag ["auth"]
 
+        # No scoring failures in this fixture
+        for agent_summary in report.agents:
+            assert agent_summary.scoring_failure_rate == 0.0
+
     async def test_compute_benchmark_report_multiple_cases(self, aggregator):
         """Test computing a benchmark report with multiple cases."""
         # Arrange
@@ -534,6 +538,10 @@ class TestBenchmarkReportGeneration:
         assert report.per_case_topics["case-1"] == "Auth/Security"  # tag ["auth"]
         assert report.per_case_topics["case-2"] == "Other"  # tag ["api"] -> no match
         assert claude_summary.avg_score == 2.0  # (1.9 + 2.1) / 2
+
+        # No scoring failures in this fixture
+        assert gpt_summary.scoring_failure_rate == 0.0
+        assert claude_summary.scoring_failure_rate == 0.0
 
     async def test_generate_benchmark_report_when_complete(
         self, aggregator, mock_mongo_storage, mock_redis_storage, mock_event_bus
@@ -690,6 +698,111 @@ class TestBenchmarkReportGeneration:
         claude_summary = next(a for a in report.agents if a.agent_id == "claude-haiku-4-5")
         assert gpt_summary.failure_rate == 0.5
         assert claude_summary.failure_rate == 0.0
+
+
+class TestScoringFailureHandling:
+    """Tests for scoring_failed / error_type propagation through the aggregator."""
+
+    async def test_old_event_without_scoring_fields_defaults(self, aggregator):
+        """Legacy payloads without scoring_failed/error_type default safely."""
+        envelope = EventEnvelope(
+            event_id="evt-legacy",
+            event_type=STEP_SCORED,
+            timestamp=datetime.now(UTC).isoformat(),
+            correlation_id="run-1",
+            payload={
+                "run_id": "run-1",
+                "case_id": "case-1",
+                "step_id": "s1_findings",
+                "strategy": "finding_match",
+                "raw_score": 0.8,
+                "weighted_score": 0.8,
+                "latency_ms": 500,
+                "passed": True,
+                "details": {},
+            },
+        )
+
+        aggregator._handle_step_scored(envelope)
+
+        scores = aggregator.get_accumulated_scores("run-1")
+        assert len(scores) == 1
+        assert scores[0].scoring_failed is False
+        assert scores[0].error_type is None
+
+    async def test_scoring_failure_excluded_from_avg(self, aggregator):
+        """A fully-failed step score is excluded from avg_score and per_case_scores."""
+        failed_step = StepScore(
+            run_id="run-1",
+            case_id="case-1",
+            step_id="s2_summary",
+            strategy="llm_judge",
+            raw_score=0.0,
+            weighted_score=0.0,
+            latency_ms=300,
+            passed=False,
+            scoring_failed=True,
+            error_type="parse_error",
+        )
+        run_report = aggregator._compute_run_report(
+            run_id="run-1",
+            benchmark_id="bench-1",
+            case_id="case-1",
+            case_tags=["auth"],
+            agent_id="gpt-4o-mini",
+            workflow_id="wf_pr_review_v1",
+            scores=[failed_step],
+        )
+        assert run_report.scoring_failures == 1
+
+        report = aggregator._compute_benchmark_report(
+            benchmark_id="bench-1",
+            workflow_id="wf_pr_review_v1",
+            case_set_id="pr_review_cases_v1",
+            run_reports=[run_report],
+        )
+
+        gpt_summary = next(a for a in report.agents if a.agent_id == "gpt-4o-mini")
+        assert gpt_summary.avg_score == 0.0
+        assert gpt_summary.scoring_failure_rate == 1.0
+        assert report.per_case_scores["case-1"]["gpt-4o-mini"] is None
+
+    async def test_agent_with_all_runs_failed_still_reported(self, aggregator):
+        """An agent whose every run failed scoring still appears in summaries."""
+        failed_step = StepScore(
+            run_id="run-1",
+            case_id="case-1",
+            step_id="s2_summary",
+            strategy="llm_judge",
+            raw_score=0.0,
+            weighted_score=0.0,
+            latency_ms=300,
+            passed=False,
+            scoring_failed=True,
+            error_type="api_error",
+        )
+        run_report = aggregator._compute_run_report(
+            run_id="run-1",
+            benchmark_id="bench-1",
+            case_id="case-1",
+            case_tags=["auth"],
+            agent_id="broken-agent",
+            workflow_id="wf_pr_review_v1",
+            scores=[failed_step],
+        )
+
+        report = aggregator._compute_benchmark_report(
+            benchmark_id="bench-1",
+            workflow_id="wf_pr_review_v1",
+            case_set_id="pr_review_cases_v1",
+            run_reports=[run_report],
+        )
+
+        agent_ids = {a.agent_id for a in report.agents}
+        assert "broken-agent" in agent_ids
+        broken_summary = next(a for a in report.agents if a.agent_id == "broken-agent")
+        assert broken_summary.avg_score == 0.0
+        assert broken_summary.scoring_failure_rate == 1.0
 
 
 class TestPercentileCalculation:

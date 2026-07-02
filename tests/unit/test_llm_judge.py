@@ -289,6 +289,8 @@ class TestScoreMethod:
         assert score.details["judge_model"] == DEFAULT_JUDGE_MODEL
         assert score.details["parse_failed"] is False
         assert score.details["error_type"] is None
+        assert score.scoring_failed is False
+        assert score.error_type is None
 
         # Verify the judge was called
         mock_client.chat.completions.create.assert_called_once()
@@ -318,11 +320,14 @@ class TestScoreMethod:
             case=sample_case,
         )
 
-        # Parser fallback returns score 0.0 without raising
+        # Parser fallback returns score 0.0 without raising, but is flagged
+        # as a scoring failure so it's never averaged in as a real 0.0.
         assert score.raw_score == 0.0
         assert score.passed is False
-        assert score.details["parse_failed"] is False
-        assert score.details["error_type"] is None
+        assert score.details["parse_failed"] is True
+        assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
         assert "defaulted to 0.0" in score.details["reasoning"]
 
     @pytest.mark.asyncio
@@ -347,8 +352,10 @@ class TestScoreMethod:
 
         assert score.raw_score == 0.0
         assert score.passed is False
-        assert score.details["parse_failed"] is False
-        assert score.details["error_type"] is None
+        assert score.details["parse_failed"] is True
+        assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
 
     @pytest.mark.asyncio
     async def test_score_rejects_wrong_rubric_key_name(self, sample_step, sample_case):
@@ -458,6 +465,8 @@ class TestScoreMethod:
 
         assert score.raw_score == 0.0
         assert score.passed is False
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
 
     @pytest.mark.asyncio
     async def test_score_applies_weight(self, sample_case):
@@ -558,6 +567,8 @@ class TestScoreMethod:
         assert score.passed is False
         assert score.details["parse_failed"] is True
         assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
         assert "refused" in score.details["reasoning"].lower()
 
     @pytest.mark.asyncio
@@ -597,8 +608,82 @@ class TestScoreMethod:
         assert score.passed is False
         assert score.details["parse_failed"] is True
         assert score.details["error_type"] == "api_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "api_error"
         assert "API failure fallback" in score.details["reasoning"]
         assert any("LLM judge API error" in record.message for record in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_regex_fallback_marks_scoring_failed(self, sample_step, sample_case):
+        """Regex-recovered score (no valid JSON) is flagged as a scoring failure."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "score: 0.8\nreasoning: solid summary overall"
+        mock_choice.message.refusal = None
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        strategy = LLMJudgeStrategy(client=mock_client)
+        score = await strategy.score(
+            step=sample_step,
+            response_text="Summary",
+            run_id="run-regex-fallback",
+            latency_ms=500,
+            case=sample_case,
+        )
+
+        assert score.raw_score == 0.8
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
+        assert score.details["parse_failed"] is True
+        assert score.details["error_type"] == "parse_error"
+
+    @pytest.mark.asyncio
+    async def test_details_mirror_first_class_fields(self, sample_step, sample_case):
+        """details['parse_failed']/['error_type'] mirror the first-class fields."""
+        mock_client = MagicMock()
+
+        # Success case: clean strict JSON parse.
+        success_response = MagicMock()
+        success_choice = MagicMock()
+        success_choice.message.content = (
+            '{"dimension_scores": {"prioritization": 0.8, "grounding": 0.8, '
+            '"test_coverage": 0.8, "no_filler": 0.8, "actionability": 0.8}, '
+            '"score": 0.8, "reasoning": "Solid review with clear guidance."}'
+        )
+        success_choice.message.refusal = None
+        success_response.choices = [success_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=success_response)
+
+        strategy = LLMJudgeStrategy(client=mock_client)
+        success_score = await strategy.score(
+            step=sample_step,
+            response_text="Summary",
+            run_id="run-mirror-success",
+            latency_ms=500,
+            case=sample_case,
+        )
+        assert success_score.scoring_failed == success_score.details["parse_failed"]
+        assert success_score.error_type == success_score.details["error_type"]
+
+        # Failure case: unparseable content triggers the total-failure fallback.
+        failure_response = MagicMock()
+        failure_choice = MagicMock()
+        failure_choice.message.content = "Not valid JSON at all"
+        failure_choice.message.refusal = None
+        failure_response.choices = [failure_choice]
+        mock_client.chat.completions.create = AsyncMock(return_value=failure_response)
+
+        failure_score = await strategy.score(
+            step=sample_step,
+            response_text="Summary",
+            run_id="run-mirror-failure",
+            latency_ms=500,
+            case=sample_case,
+        )
+        assert failure_score.scoring_failed == failure_score.details["parse_failed"]
+        assert failure_score.error_type == failure_score.details["error_type"]
 
 
 class TestInvalidScoreScaleRejection:
@@ -650,6 +735,8 @@ class TestInvalidScoreScaleRejection:
         assert score.passed is False
         assert score.details["parse_failed"] is True
         assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
 
     @pytest.mark.asyncio
     async def test_rejects_10_point_scale_score(self, sample_step, sample_case):
@@ -671,6 +758,8 @@ class TestInvalidScoreScaleRejection:
         assert score.passed is False
         assert score.details["parse_failed"] is True
         assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
 
     @pytest.mark.asyncio
     async def test_rejects_negative_score(self, sample_step, sample_case):
@@ -692,6 +781,8 @@ class TestInvalidScoreScaleRejection:
         assert score.passed is False
         assert score.details["parse_failed"] is True
         assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
 
     @pytest.mark.asyncio
     async def test_rejects_score_above_100(self, sample_step, sample_case):
@@ -713,6 +804,8 @@ class TestInvalidScoreScaleRejection:
         assert score.passed is False
         assert score.details["parse_failed"] is True
         assert score.details["error_type"] == "parse_error"
+        assert score.scoring_failed is True
+        assert score.error_type == "parse_error"
 
 
 class TestTemperatureSetting:

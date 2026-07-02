@@ -12,7 +12,7 @@ import pytest
 from rich.console import Console, ConsoleRenderable
 from rich.text import Text
 
-from agentbench.models.results import AgentSummary, BenchmarkReport
+from agentbench.models.results import AgentSummary, BenchmarkReport, StepScore
 from cli.reporting import (
     compute_insights,
     compute_winners,
@@ -20,6 +20,7 @@ from cli.reporting import (
     order_agents,
     render_insights,
     render_per_topic_tables,
+    render_rescore_summary,
     render_step_breakdown,
     render_summary_table,
     sort_cases,
@@ -849,6 +850,41 @@ class TestRenderSummaryTable:
         output = render(fixed_console, table)
         assert "2500ms" in output
         assert "1500ms" in output
+
+    def test_shows_scoring_failure_rate_column(
+        self, single_agent_report: BenchmarkReport, wide_console: Console
+    ) -> None:
+        """Summary table includes a Scoring Fail column with the failure rate."""
+        agent = single_agent_report.agents[0].model_copy(update={"scoring_failure_rate": 0.25})
+        table = render_summary_table([agent])
+        output = render(wide_console, table)
+        assert "Scoring Fail" in output
+        assert "25%" in output
+
+
+class TestRenderRescoreSummary:
+    """Tests for render_rescore_summary."""
+
+    def test_rescore_summary_shows_failure(self, fixed_console: Console) -> None:
+        """A failed StepScore renders an unmistakable FAILED row with error_type."""
+        score = StepScore(
+            run_id="run-1",
+            case_id="case-1",
+            step_id="s2_review_summary",
+            strategy="llm_judge",
+            raw_score=0.0,
+            weighted_score=0.0,
+            latency_ms=500,
+            passed=False,
+            scoring_failed=True,
+            error_type="parse_error",
+            details={"parse_failed": True, "error_type": "parse_error"},
+        )
+
+        output = render(fixed_console, render_rescore_summary(score))
+
+        assert "FAILED" in output
+        assert "parse_error" in output
 
 
 class TestRenderPerTopicTables:

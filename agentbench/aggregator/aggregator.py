@@ -134,9 +134,14 @@ class Aggregator:
         Returns:
             A RunReport with computed totals.
         """
-        total_weight = sum(s.weight for s in scores)
-        total_score = sum(s.weighted_score for s in scores) / total_weight if total_weight else 0.0
+        # Failed judge calls never produce a real score; exclude them from the
+        # weighted average so they aren't averaged in as if they were real 0.0s.
+        valid = [s for s in scores if not s.scoring_failed]
+        total_weight = sum(s.weight for s in valid)
+        total_score = sum(s.weighted_score for s in valid) / total_weight if total_weight else 0.0
+        # Total latency still sums ALL steps: failed judge calls consumed wall-clock time.
         total_latency = sum(s.latency_ms for s in scores)
+        scoring_failures = sum(1 for s in scores if s.scoring_failed)
 
         return RunReport(
             run_id=run_id,
@@ -149,6 +154,7 @@ class Aggregator:
             step_scores=scores,
             total_latency_ms=total_latency,
             completed_at=datetime.now(UTC).isoformat(),
+            scoring_failures=scoring_failures,
         )
 
     def _compute_benchmark_report(
@@ -179,22 +185,39 @@ class Aggregator:
         Returns:
             A BenchmarkReport with agent summaries and per-case scores.
         """
+        # Build the agent set from ALL run reports so an agent whose every run
+        # failed scoring still appears in the summaries (avg_score 0.0,
+        # scoring_failure_rate 1.0) instead of silently disappearing.
+        all_agent_ids = {r.agent_id for r in run_reports}
+
         # Aggregate scores by agent
         agent_scores: dict[str, list[float]] = defaultdict(list)
         agent_latencies: dict[str, list[int]] = defaultdict(list)
+        agent_scoring_failures: dict[str, int] = defaultdict(int)
+        agent_step_score_counts: dict[str, int] = defaultdict(int)
         # Failure counts and run totals cover all runs (including failed ones,
         # which never emit RunReports); default to no failures when unavailable.
         failures = agent_failures or {}
         totals = agent_totals or {}
 
-        for report in run_reports:
-            agent_scores[report.agent_id].append(report.total_score)
-            agent_latencies[report.agent_id].append(report.total_latency_ms)
-
         # Track per-case scores for cross-agent comparison
-        per_case_scores: dict[str, dict[str, float]] = defaultdict(dict)
+        per_case_scores: dict[str, dict[str, float | None]] = defaultdict(dict)
         for report in run_reports:
-            per_case_scores[report.case_id][report.agent_id] = report.total_score
+            agent_latencies[report.agent_id].append(report.total_latency_ms)
+            agent_scoring_failures[report.agent_id] += report.scoring_failures
+            agent_step_score_counts[report.agent_id] += len(report.step_scores)
+
+            # A run with no step scores at all (e.g. legacy/test fixtures) isn't
+            # "fully failed" -- only treat a run as failed when it actually has
+            # step scores and every one of them failed scoring.
+            has_valid_score = not report.step_scores or (
+                report.scoring_failures < len(report.step_scores)
+            )
+            if has_valid_score:
+                agent_scores[report.agent_id].append(report.total_score)
+                per_case_scores[report.case_id][report.agent_id] = report.total_score
+            else:
+                per_case_scores[report.case_id][report.agent_id] = None
 
         # Map each case to its canonical topic
         per_case_topics: dict[str, str] = {}
@@ -205,24 +228,33 @@ class Aggregator:
                 per_case_topics[report.case_id] = resolve_case_topic(report.case_tags)
         # Build final agent summaries with step breakdowns
         agents = []
-        for agent_id in agent_scores:
-            scores = agent_scores[agent_id]
-            latencies = agent_latencies[agent_id]
+        for agent_id in all_agent_ids:
+            scores = agent_scores.get(agent_id, [])
+            latencies = agent_latencies.get(agent_id, [])
             # Failure rate is failures over total runs; fall back to the count of
             # successful runs when run totals were not provided.
             total_runs = totals.get(agent_id, len(scores))
 
-            # Average raw step scores across all runs for this agent
+            # Average raw step scores across all runs for this agent, skipping
+            # steps whose scoring failed so they don't drag down the average.
             step_scores: dict[str, list[float]] = defaultdict(list)
             for report in run_reports:
                 if report.agent_id == agent_id:
                     for step_score in report.step_scores:
-                        step_scores[step_score.step_id].append(step_score.raw_score)
+                        if not step_score.scoring_failed:
+                            step_scores[step_score.step_id].append(step_score.raw_score)
 
             step_breakdown = {
                 step_id: sum(scores) / len(scores) if scores else 0.0
                 for step_id, scores in step_scores.items()
             }
+
+            total_step_scores = agent_step_score_counts.get(agent_id, 0)
+            scoring_failure_rate = (
+                agent_scoring_failures.get(agent_id, 0) / total_step_scores
+                if total_step_scores
+                else 0.0
+            )
 
             summary = AgentSummary(
                 agent_id=agent_id,
@@ -231,6 +263,7 @@ class Aggregator:
                 p95_latency_ms=self._calculate_percentile(latencies, 95),
                 failure_rate=failures.get(agent_id, 0) / total_runs if total_runs else 0.0,
                 step_breakdown=step_breakdown,
+                scoring_failure_rate=scoring_failure_rate,
             )
             agents.append(summary)
 
@@ -261,6 +294,8 @@ class Aggregator:
             weighted_score=payload.get("weighted_score", 0.0),
             latency_ms=payload.get("latency_ms", 0),
             passed=payload.get("passed", False),
+            scoring_failed=payload.get("scoring_failed", False),
+            error_type=payload.get("error_type"),
             details=payload.get("details", {}),
         )
 

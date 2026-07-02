@@ -214,7 +214,7 @@ class LLMJudgeStrategy:
         2) json-repair recovery + Pydantic validation
         3) Regex score extraction fallback
         """
-        verdict = self._parse_judge_response_unified(response_text)
+        verdict, _parse_marker = self._parse_judge_response_unified(response_text)
         return verdict.score, verdict.reasoning
 
     def _build_fallback_verdict(
@@ -288,8 +288,13 @@ class LLMJudgeStrategy:
 
         return dimension_scores
 
-    def _parse_judge_response_unified(self, response_text: str) -> JudgeVerdict:
-        """Parse judge response through unified runtime fallback path."""
+    def _parse_judge_response_unified(self, response_text: str) -> tuple[JudgeVerdict, str | None]:
+        """Parse judge response through unified runtime fallback path.
+
+        Returns a tuple of (verdict, parse_marker). parse_marker is None for a
+        clean strict or json-repair parse, and "parse_error" when the verdict
+        was recovered via regex fallback or the final total-failure fallback.
+        """
         json_patterns = [
             r"```json\s*(\{.*?\})\s*```",  # Markdown JSON block
             r"```\s*(\{.*?\})\s*```",  # Generic code block with JSON
@@ -310,7 +315,7 @@ class LLMJudgeStrategy:
         # Layer 1: strict Pydantic parsing
         for json_candidate in json_candidates:
             try:
-                return JudgeVerdict.model_validate_json(json_candidate)
+                return JudgeVerdict.model_validate_json(json_candidate), None
             except (ValidationError, ValueError, TypeError):
                 continue
 
@@ -330,7 +335,7 @@ class LLMJudgeStrategy:
                         verdict = JudgeVerdict.model_validate_json(repaired)
                     else:
                         verdict = JudgeVerdict.model_validate(repaired)
-                    return verdict
+                    return verdict, None
                 except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
                     continue
 
@@ -365,7 +370,9 @@ class LLMJudgeStrategy:
                     )
 
                 dimension_scores = self._extract_dimension_scores_regex(response_text, score)
-                return self._build_fallback_verdict(score, reasoning, dimension_scores)
+                return self._build_fallback_verdict(
+                    score, reasoning, dimension_scores
+                ), "parse_error"
             except ValueError:
                 pass
 
@@ -373,9 +380,9 @@ class LLMJudgeStrategy:
             f"{PARSE_FAILURE_REASON_PREFIX}; defaulted to 0.0. "
             f"Response excerpt: {response_text[:200]}"
         )
-        return self._build_fallback_verdict(0.0, fallback_reasoning)
+        return self._build_fallback_verdict(0.0, fallback_reasoning), "parse_error"
 
-    async def _invoke_judge(self, prompt: str) -> JudgeVerdict:
+    async def _invoke_judge(self, prompt: str) -> tuple[JudgeVerdict, str | None]:
         """Invoke the judge LLM with structured output guarantees."""
         client = self._get_client()
 
@@ -432,11 +439,12 @@ class LLMJudgeStrategy:
         error_type: str | None = None
 
         try:
-            judge_response = await self._invoke_judge(judge_prompt)
+            judge_response, parse_marker = await self._invoke_judge(judge_prompt)
             score = judge_response.score
             reasoning = judge_response.reasoning
             dimension_scores = judge_response.dimension_scores.model_dump()
-            parse_failed = False
+            error_type = parse_marker
+            parse_failed = error_type is not None
         except OPENAI_ERRORS as e:
             logger.error(
                 "LLM judge API error for run_id=%s, case_id=%s: %s",
@@ -466,6 +474,7 @@ class LLMJudgeStrategy:
         weighted_score = score * weight
 
         passed = score >= 0.5
+        scoring_failed = parse_failed
 
         return StepScore(
             run_id=run_id,
@@ -477,6 +486,8 @@ class LLMJudgeStrategy:
             weighted_score=weighted_score,
             latency_ms=latency_ms,
             passed=passed,
+            scoring_failed=scoring_failed,
+            error_type=error_type,
             details={
                 "reasoning": reasoning,
                 "judge_model": self._judge_model,

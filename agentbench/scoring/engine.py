@@ -356,6 +356,8 @@ class ScoringEngine:
                             "weighted_score": score.weighted_score,
                             "latency_ms": score.latency_ms,
                             "passed": score.passed,
+                            "scoring_failed": score.scoring_failed,
+                            "error_type": score.error_type,
                         },
                     )
                     await self.event_bus.publish(STREAM_SCORES, event)
