@@ -28,7 +28,7 @@ LABEL org.opencontainers.image.description="AI evaluation framework for PR revie
 LABEL org.opencontainers.image.source="https://github.com/aluiziolira/agentbench-ai-evaluation"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="Aluizio Lira"
-LABEL org.opencontainers.image.authors="alumlira@gmail.com"
+LABEL org.opencontainers.image.authors="aluizio@aluiziolira.dev"
 LABEL org.opencontainers.image.documentation="https://github.com/aluiziolira/agentbench-ai-evaluation#readme"
 
 # Python environment
